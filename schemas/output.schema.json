@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/taxonfinder/output.schema.json",
+  "title": "TaxonFinder Output",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "line_number",
+      "source_text",
+      "source_context",
+      "identified",
+      "extraction_confidence",
+      "extraction_method",
+      "matches"
+    ],
+    "properties": {
+      "line_number": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "source_text": {
+        "type": "string",
+        "minLength": 1
+      },
+      "source_context": {
+        "type": "string",
+        "minLength": 1
+      },
+      "identified": {
+        "type": "string",
+        "enum": [
+          "yes",
+          "no"
+        ]
+      },
+      "extraction_confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Confidence that the extracted fragment is a taxon name. Depends on extraction method: gazetteer exact=1.0, gazetteer lemma=0.9, latin_regex=0.95, llm=0.7 or LLM-provided."
+      },
+      "extraction_method": {
+        "type": "string",
+        "enum": [
+          "gazetteer",
+          "latin_regex",
+          "llm"
+        ],
+        "description": "Method used to extract the candidate taxon name."
+      },
+      "matches": {
+        "type": "array",
+        "maxItems": 5,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "taxon_id",
+            "taxon_name",
+            "taxon_rank",
+            "taxon_common_name",
+            "taxon_matched_name",
+            "taxon_url"
+          ],
+          "properties": {
+            "taxon_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "taxon_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "taxon_rank": {
+              "type": "string",
+              "minLength": 1
+            },
+            "taxon_common_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "taxon_matched_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "taxon_url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      },
+      "llm_response": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "common_names_ru",
+          "common_names_en"
+        ],
+        "properties": {
+          "common_names_ru": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "common_names_en": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "candidate_names": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "reason": {
+        "type": "string"
+      }
+    }
+  }
+}

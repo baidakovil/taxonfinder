@@ -1,0 +1,45 @@
+[
+  {
+    "line_number": 1,
+    "source_text": "дикая коза",
+    "source_context": "В общем, дикая коза — пугливое животное, вечно преследуемое четвероногими хищниками и человеком.",
+    "identified": "no",
+    "extraction_confidence": 0.7,
+    "extraction_method": "llm",
+    "matches": [
+      {
+        "taxon_id": 12345,
+        "taxon_name": "Capra aegagrus",
+        "taxon_rank": "species",
+        "taxon_common_name": "Wild Goat",
+        "taxon_matched_name": "дикая коза",
+        "taxon_url": "https://www.inaturalist.org/taxa/12345"
+      },
+      {
+        "taxon_id": 67890,
+        "taxon_name": "Capra hircus",
+        "taxon_rank": "species",
+        "taxon_common_name": "Domestic Goat",
+        "taxon_matched_name": "коза",
+        "taxon_url": "https://www.inaturalist.org/taxa/67890"
+      }
+    ],
+    "llm_response": {
+      "common_names_ru": [
+        "дикая коза",
+        "коза"
+      ],
+      "common_names_en": [
+        "Wild Goat",
+        "Goat"
+      ]
+    },
+    "candidate_names": [
+      "дикая коза",
+      "коза",
+      "Wild Goat",
+      "Goat"
+    ],
+    "reason": "Multiple candidate taxa found; lemma match is ambiguous between Capra aegagrus and Capra hircus."
+  }
+]

@@ -1,0 +1,21 @@
+[
+  {
+    "line_number": 1,
+    "source_text": "липа",
+    "source_context": "На перевале росла огромная липа, растущая, словно великан, здесь уже более двух веков.",
+    "identified": "yes",
+    "extraction_confidence": 1.0,
+    "extraction_method": "gazetteer",
+    "matches": [
+      {
+        "taxon_id": 54586,
+        "taxon_name": "Tilia",
+        "taxon_rank": "genus",
+        "taxon_common_name": "Linden",
+        "taxon_matched_name": "липа",
+        "taxon_url": "https://www.inaturalist.org/taxa/54586"
+      }
+    ],
+    "llm_response": null
+  }
+]

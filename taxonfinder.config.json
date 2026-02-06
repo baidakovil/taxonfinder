@@ -1,0 +1,9 @@
+{
+  "confidence": 0.6,
+  "locale": "ru",
+  "llm_prompt_file": "prompts/taxon_extraction.txt",
+  "llm_provider": "ollama",
+  "llm_model": "llama3.1",
+  "llm_url": "http://localhost:11434",
+  "llm_timeout": 30
+}
