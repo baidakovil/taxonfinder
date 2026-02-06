@@ -6,9 +6,7 @@
   "additionalProperties": false,
   "required": [
     "confidence",
-    "locale",
-    "llm_provider",
-    "llm_model"
+    "locale"
   ],
   "properties": {
     "confidence": {
@@ -22,37 +20,99 @@
       "minLength": 2,
       "description": "Locale preference for taxon common names in iNaturalist API."
     },
-    "llm_prompt_file": {
+    "gazetteer_path": {
       "type": "string",
       "minLength": 1,
-      "default": "prompts/taxon_extraction.txt",
-      "description": "Path to the LLM prompt template file (relative to project root)."
+      "default": "data/gazetteer.db",
+      "description": "Path to the gazetteer SQLite database (relative to project root)."
     },
-    "llm_provider": {
-      "type": "string",
-      "enum": [
-        "ollama",
-        "openai",
-        "anthropic"
-      ],
-      "description": "LLM provider to use."
+    "llm_extractor": {
+      "type": ["object", "null"],
+      "description": "LLM extractor settings (Phase 1). Set to null or omit to disable.",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the LLM extractor is enabled."
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["ollama", "openai", "anthropic"],
+          "description": "LLM provider."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model name for the chosen provider (e.g. llama3.1, gpt-4o-mini)."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL for LLM connection. Required for Ollama. Optional for cloud providers."
+        },
+        "timeout": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 600,
+          "default": 60,
+          "description": "Timeout in seconds for LLM responses."
+        },
+        "prompt_file": {
+          "type": "string",
+          "minLength": 1,
+          "default": "prompts/llm_extractor.txt",
+          "description": "Path to the LLM extractor prompt file (relative to project root)."
+        },
+        "chunk_strategy": {
+          "type": "string",
+          "enum": ["paragraph", "page"],
+          "default": "paragraph",
+          "description": "Strategy for splitting text into chunks: 'paragraph' (~150-300 words) or 'page' (~350 words)."
+        }
+      }
     },
-    "llm_model": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Model name for the chosen provider (e.g. llama3.1, gemma2, gpt-4o-mini)."
-    },
-    "llm_url": {
-      "type": "string",
-      "format": "uri",
-      "description": "URL for LLM connection. Required for Ollama (e.g. http://localhost:11434). Optional for cloud providers."
-    },
-    "llm_timeout": {
-      "type": "number",
-      "minimum": 1,
-      "maximum": 300,
-      "default": 30,
-      "description": "Timeout in seconds for LLM responses."
+    "llm_enricher": {
+      "type": ["object", "null"],
+      "description": "LLM enricher settings (Phase 4: enrichment of unresolved candidates). Set to null or omit to disable.",
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the LLM enricher is enabled."
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["ollama", "openai", "anthropic"],
+          "description": "LLM provider."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model name for the chosen provider."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL for LLM connection. Required for Ollama. Optional for cloud providers."
+        },
+        "timeout": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30,
+          "description": "Timeout in seconds for LLM responses."
+        },
+        "prompt_file": {
+          "type": "string",
+          "minLength": 1,
+          "default": "prompts/llm_enricher.txt",
+          "description": "Path to the LLM enricher prompt file (relative to project root)."
+        }
+      }
     }
   }
 }

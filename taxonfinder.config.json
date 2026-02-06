@@ -1,9 +1,22 @@
 {
   "confidence": 0.6,
   "locale": "ru",
-  "llm_prompt_file": "prompts/taxon_extraction.txt",
-  "llm_provider": "ollama",
-  "llm_model": "llama3.1",
-  "llm_url": "http://localhost:11434",
-  "llm_timeout": 30
+  "gazetteer_path": "data/gazetteer.db",
+  "llm_extractor": {
+    "enabled": true,
+    "provider": "ollama",
+    "model": "llama3.1",
+    "url": "http://localhost:11434",
+    "timeout": 60,
+    "prompt_file": "prompts/llm_extractor.txt",
+    "chunk_strategy": "paragraph"
+  },
+  "llm_enricher": {
+    "enabled": true,
+    "provider": "ollama",
+    "model": "llama3.1",
+    "url": "http://localhost:11434",
+    "timeout": 30,
+    "prompt_file": "prompts/llm_enricher.txt"
+  }
 }
