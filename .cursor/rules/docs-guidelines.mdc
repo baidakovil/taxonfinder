@@ -1,0 +1,12 @@
+---
+description: Documentation style for Markdown files
+globs: **/*.md, **/*.mdc
+alwaysApply: false
+---
+
+# Documentation Guidelines
+
+- Keep docs concise and task-focused.
+- Use clear headings and short sections.
+- Provide runnable examples when helpful.
+- Prefer Markdown lists and code fences for readability.

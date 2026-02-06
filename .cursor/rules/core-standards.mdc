@@ -1,0 +1,32 @@
+---
+description: Core coding standards for the project
+alwaysApply: true
+---
+
+# Core Coding Standards
+
+- Write clean, readable code with consistent naming and structure.
+- Prefer small, focused functions and clear module boundaries.
+- Use modern Python syntax (3.11+), f-strings, dataclasses where appropriate.
+- Include type hints for public functions and complex data structures.
+- Add docstrings for public modules, classes, and functions.
+- Keep dependencies minimal and standard-library first.
+
+## Testing Requirements
+
+- Write unit tests for new behavior and bug fixes.
+- Favor deterministic tests; avoid network and time dependencies.
+- Use pytest and arrange/act/assert structure.
+- Name tests descriptively and cover edge cases.
+
+## Formatting & Style
+
+- Follow PEP 8 and format with Black-compatible style.
+- Sort imports with isort-compatible grouping.
+- Keep lines reasonably short (<= 100 chars).
+
+## AI Coding Workflow
+
+- When editing, read the file first and preserve existing style.
+- Prefer small, incremental edits with minimal changes.
+- Avoid security tooling or checks unless explicitly requested.
