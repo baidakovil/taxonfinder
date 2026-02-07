@@ -20,23 +20,29 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Validate test fixtures against schemas
+        - name: Validate test fixtures against schemas
         run: |
-          python -c "
-          import json, jsonschema, pathlib
+          python - <<'PY'
+          import json
+          import jsonschema
+          from pathlib import Path
 
-          schemas_dir = pathlib.Path('schemas')
-          tests_dir = pathlib.Path('tests/data')
+          schemas_dir = Path('schemas')
+          tests_dir = Path('tests/data')
 
           dedup_schema = json.loads((schemas_dir / 'output-deduplicated.schema.json').read_text())
 
           for fixture in tests_dir.glob('*_output.json'):
-              data = json.loads(fixture.read_text())
-              # Fixtures are raw result arrays; wrap in envelope for validation
+            data = json.loads(fixture.read_text())
+            # Accept fixtures that are either raw result arrays or already wrapped envelopes
+            if isinstance(data, dict) and 'results' in data and isinstance(data['results'], list):
+              envelope = data
+            else:
               envelope = {'version': '1.0', 'results': data}
-              jsonschema.validate(envelope, dedup_schema)
-              print(f'  OK: {fixture.name}')
-          "
+
+            jsonschema.validate(envelope, dedup_schema)
+            print(f'  OK: {fixture.name}')
+          PY
 
       - name: Run pytest
         run: pytest -ra

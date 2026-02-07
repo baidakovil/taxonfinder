@@ -80,9 +80,7 @@ def test_process_outputs_json(
     input_file.write_text("text", encoding="utf-8")
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
 
     def fake_process(text: str, config: Config):
         yield PhaseProgress(
@@ -102,7 +100,7 @@ def test_process_outputs_json(
     )
 
     assert result.exit_code == 0
-    assert "\"version\": \"1.0\"" in result.stdout
+    assert '"version": "1.0"' in result.stdout
     assert "липа" in result.stdout
 
 
@@ -113,9 +111,7 @@ def test_process_all_occurrences(
     input_file.write_text("text", encoding="utf-8")
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
 
     def fake_process(text: str, config: Config):
         yield ResultReady(result=_sample_result())
@@ -146,9 +142,7 @@ def test_process_writes_file_and_summary(
     input_file.write_text("text", encoding="utf-8")
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
 
     def fake_process(text: str, config: Config):
         yield PhaseProgress(
@@ -176,19 +170,15 @@ def test_process_writes_file_and_summary(
     assert result.exit_code == 0
     assert "Written to" in result.output
     assert "Done in" in result.output
-    assert "\"version\": \"1.0\"" in output_file.read_text(encoding="utf-8")
+    assert '"version": "1.0"' in output_file.read_text(encoding="utf-8")
 
 
-def test_dry_run(
-    monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
-) -> None:
+def test_dry_run(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
     input_file = tmp_path / "input.txt"
     input_file.write_text("text", encoding="utf-8")
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
 
     estimate_obj = PipelineEstimate(
         sentences=3,
@@ -213,9 +203,7 @@ def test_dry_run(
     assert "API calls (est): 1" in result.stdout
 
 
-def test_json_logs_flag(
-    monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
-) -> None:
+def test_json_logs_flag(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
     called = {}
 
     def fake_setup_logging(*, json_mode: bool):
@@ -224,9 +212,7 @@ def test_json_logs_flag(
 
     monkeypatch.setattr("taxonfinder.cli.setup_logging", fake_setup_logging)
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
     monkeypatch.setattr("taxonfinder.cli.process", lambda text, config: iter(()))
 
     input_file = tmp_path / "input.txt"
@@ -257,9 +243,7 @@ def test_process_failure_returns_error(
     dummy_logger = DummyLogger()
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
-    monkeypatch.setattr(
-        "taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text"
-    )
+    monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
     monkeypatch.setattr("taxonfinder.cli.setup_logging", lambda json_mode=False: dummy_logger)
     monkeypatch.setattr(
         "taxonfinder.cli.process", lambda text, config: (_ for _ in ()).throw(ValueError("boom"))

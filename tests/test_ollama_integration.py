@@ -39,7 +39,7 @@ def test_ollama_client_returns_json() -> None:
     )
 
     system_prompt = "You must respond with JSON only."
-    user_content = "Return ONLY JSON: {\"candidates\": []}"
+    user_content = 'Return ONLY JSON: {"candidates": []}'
     text = client.complete(system_prompt, user_content)
 
     assert text.strip()

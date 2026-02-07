@@ -9,7 +9,7 @@ from taxonfinder.extractors.llm_client import LlmError, OllamaClient
 def test_ollama_client_parses_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers.get("User-Agent") == "TaxonFinder/0.1.0"
-        return httpx.Response(200, json={"response": "{\"candidates\": []}"})
+        return httpx.Response(200, json={"response": '{"candidates": []}'})
 
     transport = httpx.MockTransport(handler)
     client = httpx.Client(transport=transport)

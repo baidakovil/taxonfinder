@@ -51,9 +51,7 @@ def _decode_with_fallback(data: bytes) -> str:
     if best_text is not None and best_score > 0:
         return best_text
 
-    raise ValueError(
-        "Unable to detect input file encoding. Please convert the file to UTF-8."
-    )
+    raise ValueError("Unable to detect input file encoding. Please convert the file to UTF-8.")
 
 
 def _has_cyrillic(text: str) -> bool:

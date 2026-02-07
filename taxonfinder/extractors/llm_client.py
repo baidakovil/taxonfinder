@@ -18,8 +18,7 @@ class LlmClient(Protocol):
         user_content: str,
         *,
         response_schema: dict | None = None,
-    ) -> str:
-        ...
+    ) -> str: ...
 
 
 @dataclass(slots=True)

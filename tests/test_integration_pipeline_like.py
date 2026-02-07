@@ -91,9 +91,7 @@ def test_pipeline_like_integration_identifies_candidates(tmp_path: Path) -> None
         min_chunk_words=1,
         max_chunk_words=50,
     )
-    llm_client = FakeLlmClient(
-        {"candidates": [{"name": "ель", "context": "Встречалась ель."}]}
-    )
+    llm_client = FakeLlmClient({"candidates": [{"name": "ель", "context": "Встречалась ель."}]})
     llm = LlmExtractorPhase(llm_config, locale="ru", llm_client=llm_client)
     llm_candidates = llm.extract(loaded)
 

@@ -20,11 +20,7 @@ def _load_fixture(name: str) -> list[dict]:
 def test_one_sentence_contains_linden_taxon_id() -> None:
     output = _load_fixture("one_sentence_output.json")
 
-    taxon_ids = {
-        match["taxon_id"]
-        for item in output
-        for match in item.get("matches", [])
-    }
+    taxon_ids = {match["taxon_id"] for item in output for match in item.get("matches", [])}
 
     assert 54586 in taxon_ids
 

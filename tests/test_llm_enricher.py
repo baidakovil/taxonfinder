@@ -49,9 +49,7 @@ def test_llm_enricher_builds_expanded_context() -> None:
         prompt_file="prompts/llm_enricher.txt",
         timeout=10,
     )
-    llm = FakeLlmClient(
-        {"common_names_loc": ["foo"], "common_names_en": [], "latin_names": []}
-    )
+    llm = FakeLlmClient({"common_names_loc": ["foo"], "common_names_en": [], "latin_names": []})
 
     enricher = LlmEnricherPhase(config, locale="ru", llm_client=llm)
     response = enricher.enrich(text, _group("target", "Target appears here."), sentences=spans)

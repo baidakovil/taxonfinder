@@ -87,8 +87,4 @@ def test_pipeline_live_full_sentence(tmp_path: Path) -> None:
             pytest.skip(f"iNaturalist unavailable: {exc!r}")
 
     assert results, "Pipeline returned no results"
-    assert any(
-        match.taxon_id == 42183
-        for result in results
-        for match in result.matches
-    )
+    assert any(match.taxon_id == 42183 for result in results for match in result.matches)

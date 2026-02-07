@@ -149,9 +149,7 @@ def build_gazetteer_cmd(
 ) -> None:
     """Placeholder for gazetteer builder (to be implemented in Step 7)."""
     _ = ctx, source, file_path, tag, locales
-    raise click.ClickException(
-        "build-gazetteer is not implemented yet (planned in Step 7)."
-    )
+    raise click.ClickException("build-gazetteer is not implemented yet (planned in Step 7).")
 
 
 if __name__ == "__main__":

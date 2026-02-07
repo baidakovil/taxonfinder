@@ -3,6 +3,7 @@
 Thin orchestrator: all business logic lives in extractors, merge, resolvers.
 This module only calls them in the right order and yields PipelineEvent.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -64,6 +65,7 @@ logger = structlog.get_logger()
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def process(
     text: str,
     config: Config,
@@ -89,18 +91,17 @@ def process(
         nlp = spacy.load(config.spacy_model)
     try:
         import pymorphy3  # noqa: PLC0415
+
         morph: object | None = pymorphy3.MorphAnalyzer()
     except Exception:
         morph = None
 
     doc = nlp(text)
     sentences = [
-        SentenceSpan(start=sent.start_char, end=sent.end_char, text=sent.text)
-        for sent in doc.sents
+        SentenceSpan(start=sent.start_char, end=sent.end_char, text=sent.text) for sent in doc.sents
     ]
     enricher_sentences = [
-        EnricherSentenceSpan(start=s.start, end=s.end, text=s.text)
-        for s in sentences
+        EnricherSentenceSpan(start=s.start, end=s.end, text=s.text) for s in sentences
     ]
 
     http_client: httpx.Client | None = None
@@ -117,10 +118,12 @@ def process(
 
         cache: DiskCache | None = None
         if config.inaturalist.cache_enabled:
-            cache = DiskCache(DiskCacheConfig(
-                path=Path(config.inaturalist.cache_path),
-                ttl_days=config.inaturalist.cache_ttl_days,
-            ))
+            cache = DiskCache(
+                DiskCacheConfig(
+                    path=Path(config.inaturalist.cache_path),
+                    ttl_days=config.inaturalist.cache_ttl_days,
+                )
+            )
 
         searcher = INaturalistSearcher(
             http=http_client,
@@ -175,7 +178,10 @@ def process(
         # --- Gazetteer ---
         if storage is not None:
             gazetteer_ext = GazetteerExtractor(
-                storage, locale=config.locale, nlp=nlp, morph=morph,
+                storage,
+                locale=config.locale,
+                nlp=nlp,
+                morph=morph,
             )
             gaz_candidates = gazetteer_ext.extract(doc)
             all_candidates.extend(gaz_candidates)
@@ -184,10 +190,7 @@ def process(
         # --- Latin regex ---
         is_known: Any = None
         if storage is not None:
-            known_latin = {
-                row_name.lower()
-                for row_name in _collect_latin_names(storage)
-            }
+            known_latin = {row_name.lower() for row_name in _collect_latin_names(storage)}
             is_known = lambda name: name.lower() in known_latin  # noqa: E731
         latin_ext = LatinRegexExtractor(morph=morph, is_known_name=is_known)
         latin_candidates = latin_ext.extract(text, sentences=sentences)
@@ -201,7 +204,9 @@ def process(
                 llm_ext_client = llm_client
             else:
                 llm_ext_client, cleanup = _build_llm_client(
-                    config.llm_extractor, config, http_client,
+                    config.llm_extractor,
+                    config,
+                    http_client,
                 )
                 if cleanup is not None:
                     cleanup_callbacks.append(cleanup)
@@ -239,7 +244,9 @@ def process(
 
             for i in range(total_chunks):
                 yield PhaseProgress(
-                    phase="extraction", current=i + 1, total=total_chunks,
+                    phase="extraction",
+                    current=i + 1,
+                    total=total_chunks,
                     detail=f"LLM chunk {i + 1}/{total_chunks}",
                 )
         else:
@@ -268,7 +275,9 @@ def process(
         groups = merge_candidates(all_candidates, skip_resolution_check=_skip_check)
         logger.info("merge_complete", groups=len(groups))
         yield PhaseProgress(
-            phase="merge", current=len(all_candidates), total=len(all_candidates),
+            phase="merge",
+            current=len(all_candidates),
+            total=len(all_candidates),
             detail=f"{len(groups)} unique candidates",
         )
         phase_times["merge"] = time.monotonic() - t0
@@ -289,14 +298,16 @@ def process(
         for group in to_skip:
             matches = _matches_from_gazetteer(group, storage, config.locale)
             identified, reason = identifier.resolve(group, matches)
-            resolved.append(ResolvedCandidate(
-                group=group,
-                matches=matches,
-                identified=identified,
-                llm_response=None,
-                candidate_names=[],
-                reason=reason,
-            ))
+            resolved.append(
+                ResolvedCandidate(
+                    group=group,
+                    matches=matches,
+                    identified=identified,
+                    llm_response=None,
+                    candidate_names=[],
+                    reason=reason,
+                )
+            )
 
         # Resolve groups via iNaturalist API
         for idx, group in enumerate(to_resolve, 1):
@@ -317,17 +328,21 @@ def process(
             if not identified:
                 candidate_names = list(variants)
 
-            resolved.append(ResolvedCandidate(
-                group=group,
-                matches=matches,
-                identified=identified,
-                llm_response=None,
-                candidate_names=candidate_names,
-                reason=reason,
-            ))
+            resolved.append(
+                ResolvedCandidate(
+                    group=group,
+                    matches=matches,
+                    identified=identified,
+                    llm_response=None,
+                    candidate_names=candidate_names,
+                    reason=reason,
+                )
+            )
 
             yield PhaseProgress(
-                phase="resolution", current=idx, total=len(to_resolve),
+                phase="resolution",
+                current=idx,
+                total=len(to_resolve),
                 detail=f"iNaturalist: {group.normalized}",
             )
 
@@ -340,9 +355,7 @@ def process(
         unresolved = [r for r in resolved if not r.identified]
 
         enricher_enabled = (
-            config.llm_enricher is not None
-            and config.llm_enricher.enabled
-            and len(unresolved) > 0
+            config.llm_enricher is not None and config.llm_enricher.enabled and len(unresolved) > 0
         )
 
         if enricher_enabled:
@@ -351,7 +364,9 @@ def process(
                 enricher_client = llm_client
             else:
                 enricher_client, cleanup = _build_llm_client(
-                    config.llm_enricher, config, http_client,
+                    config.llm_enricher,
+                    config,
+                    http_client,
                 )
                 if cleanup is not None:
                     cleanup_callbacks.append(cleanup)
@@ -362,21 +377,23 @@ def process(
                 timeout=config.llm_enricher.timeout,
             )
             enricher = LlmEnricherPhase(
-                enr_cfg, locale=config.locale, llm_client=enricher_client,
+                enr_cfg,
+                locale=config.locale,
+                llm_client=enricher_client,
             )
 
             yield PhaseStarted(phase="enrichment", total=len(unresolved))
 
             for idx, rc in enumerate(unresolved, 1):
                 llm_resp = enricher.enrich(
-                    text, rc.group, sentences=enricher_sentences,
+                    text,
+                    rc.group,
+                    sentences=enricher_sentences,
                 )
 
                 # Retry search with alternative names from LLM
                 alt_names = (
-                    llm_resp.common_names_loc
-                    + llm_resp.common_names_en
-                    + llm_resp.latin_names
+                    llm_resp.common_names_loc + llm_resp.common_names_en + llm_resp.latin_names
                 )
                 extra_matches: list[TaxonMatch] = []
                 tried_names = list(rc.candidate_names)
@@ -409,7 +426,9 @@ def process(
                 )
 
                 yield PhaseProgress(
-                    phase="enrichment", current=idx, total=len(unresolved),
+                    phase="enrichment",
+                    current=idx,
+                    total=len(unresolved),
                     detail=f"LLM enrichment: {rc.group.normalized}",
                 )
         else:
@@ -424,10 +443,7 @@ def process(
         yield PhaseStarted(phase="assembly", total=len(resolved))
 
         # Filter by confidence threshold
-        filtered = [
-            r for r in resolved
-            if r.group.confidence >= config.confidence
-        ]
+        filtered = [r for r in resolved if r.group.confidence >= config.confidence]
 
         identified_count = 0
         unidentified_count = 0
@@ -440,7 +456,9 @@ def process(
                 unidentified_count += 1
             yield ResultReady(result=result)
             yield PhaseProgress(
-                phase="assembly", current=idx, total=len(filtered),
+                phase="assembly",
+                current=idx,
+                total=len(filtered),
                 detail=f"Assembled: {result.source_text}",
             )
 
@@ -486,10 +504,7 @@ def process(
 
 def process_all(text: str, config: Config, **kwargs: Any) -> list[TaxonResult]:
     """Convenience wrapper: returns only final results."""
-    return [
-        e.result for e in process(text, config, **kwargs)
-        if isinstance(e, ResultReady)
-    ]
+    return [e.result for e in process(text, config, **kwargs) if isinstance(e, ResultReady)]
 
 
 def estimate(text: str, config: Config) -> PipelineEstimate:
@@ -528,12 +543,16 @@ def estimate(text: str, config: Config) -> PipelineEstimate:
     if storage is not None:
         try:
             import pymorphy3  # noqa: PLC0415
+
             morph: object | None = pymorphy3.MorphAnalyzer()
         except Exception:
             morph = None
 
         gazetteer_ext = GazetteerExtractor(
-            storage, locale=config.locale, nlp=nlp, morph=morph,
+            storage,
+            locale=config.locale,
+            nlp=nlp,
+            morph=morph,
         )
         gaz_candidates = gazetteer_ext.extract(doc)
         gaz_count = len(gaz_candidates)
@@ -572,6 +591,7 @@ def estimate(text: str, config: Config) -> PipelineEstimate:
 # Output formatting
 # ---------------------------------------------------------------------------
 
+
 def format_deduplicated(results: list[TaxonResult]) -> dict[str, Any]:
     """Format results as deduplicated JSON with envelope."""
     return {
@@ -598,24 +618,25 @@ def format_full(results: list[TaxonResult]) -> dict[str, Any]:
             "candidate_names": list(result.candidate_names),
             "reason": result.reason,
             "llm_response": (
-                result.llm_response.to_dict()
-                if result.llm_response is not None
-                else None
+                result.llm_response.to_dict() if result.llm_response is not None else None
             ),
         }
         for occ in result.occurrences:
-            items.append({
-                "line_number": occ.line_number,
-                "source_text": occ.source_text,
-                "source_context": occ.source_context,
-                **base,
-            })
+            items.append(
+                {
+                    "line_number": occ.line_number,
+                    "source_text": occ.source_text,
+                    "source_context": occ.source_context,
+                    **base,
+                }
+            )
     return {"version": "1.0", "results": items}
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_result(rc: ResolvedCandidate) -> TaxonResult:
     """Convert a ResolvedCandidate into a TaxonResult."""
@@ -652,21 +673,21 @@ def _matches_from_gazetteer(
         if rec is None:
             continue
         taxonomy = _taxonomy_from_ancestry(rec.ancestry, rec.taxon_name, rec.taxon_rank)
-        is_preferred = any(
-            tid == t for t in group.gazetteer_taxon_ids[:1]
+        is_preferred = any(tid == t for t in group.gazetteer_taxon_ids[:1])
+        matches.append(
+            TaxonMatch(
+                taxon_id=rec.taxon_id,
+                taxon_name=rec.taxon_name,
+                taxon_rank=rec.taxon_rank,
+                taxonomy=taxonomy,
+                taxon_common_name_en=rec.taxon_common_name_en,
+                taxon_common_name_loc=rec.taxon_common_name_loc,
+                taxon_matched_name=group.normalized,
+                taxon_url=f"https://www.inaturalist.org/taxa/{rec.taxon_id}",
+                score=1.0 if is_preferred else 0.5,
+                taxon_names=[],
+            )
         )
-        matches.append(TaxonMatch(
-            taxon_id=rec.taxon_id,
-            taxon_name=rec.taxon_name,
-            taxon_rank=rec.taxon_rank,
-            taxonomy=taxonomy,
-            taxon_common_name_en=rec.taxon_common_name_en,
-            taxon_common_name_loc=rec.taxon_common_name_loc,
-            taxon_matched_name=group.normalized,
-            taxon_url=f"https://www.inaturalist.org/taxa/{rec.taxon_id}",
-            score=1.0 if is_preferred else 0.5,
-            taxon_names=[],
-        ))
     return matches
 
 

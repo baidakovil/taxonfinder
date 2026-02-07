@@ -3,6 +3,7 @@ format_deduplicated(), format_full().
 
 Uses mock searcher and LLM client to avoid real HTTP requests.
 """
+
 from __future__ import annotations
 
 import csv
@@ -72,9 +73,7 @@ class FakeIdentifier:
     def __init__(self, identify_all: bool = True) -> None:
         self._identify_all = identify_all
 
-    def resolve(
-        self, group: CandidateGroup, matches: list[TaxonMatch]
-    ) -> tuple[bool, str]:
+    def resolve(self, group: CandidateGroup, matches: list[TaxonMatch]) -> tuple[bool, str]:
         if not matches:
             return False, "No matches in iNaturalist"
         if self._identify_all:
@@ -238,8 +237,7 @@ def _create_ulov_gazetteer_db(csv_path: Path, db_path: Path) -> None:
                 continue
 
             conn.execute(
-                "INSERT INTO taxa (taxon_id, taxon_name, taxon_rank, ancestry)"
-                " VALUES (?, ?, ?, ?)",
+                "INSERT INTO taxa (taxon_id, taxon_name, taxon_rank, ancestry) VALUES (?, ?, ?, ?)",
                 (taxon_id, taxon_name, taxon_rank, None),
             )
 
@@ -266,9 +264,7 @@ def _create_ulov_gazetteer_db(csv_path: Path, db_path: Path) -> None:
 
 
 def _expected_ulov_taxon_ids(csv_path: Path) -> set[int]:
-    return {
-        int(row["taxon_id"]) for row in _load_ulov_rows(csv_path) if row.get("taxon_id")
-    }
+    return {int(row["taxon_id"]) for row in _load_ulov_rows(csv_path) if row.get("taxon_id")}
 
 
 # ---------------------------------------------------------------------------
@@ -284,12 +280,15 @@ class TestProcessEventStream:
         config = _minimal_config(tmp_path)
         text = "Простой текст без таксонов."
 
-        events = list(process(
-            text, config,
-            searcher=FakeSearcher(),
-            identifier=FakeIdentifier(),
-            nlp=_test_nlp(),
-        ))
+        events = list(
+            process(
+                text,
+                config,
+                searcher=FakeSearcher(),
+                identifier=FakeIdentifier(),
+                nlp=_test_nlp(),
+            )
+        )
 
         phase_names = [e.phase for e in events if isinstance(e, PhaseStarted)]
         assert "extraction" in phase_names
@@ -305,12 +304,15 @@ class TestProcessEventStream:
         config = _minimal_config(tmp_path)
         text = "Нет таксонов в этом тексте."
 
-        events = list(process(
-            text, config,
-            searcher=FakeSearcher(),
-            identifier=FakeIdentifier(),
-            nlp=_test_nlp(),
-        ))
+        events = list(
+            process(
+                text,
+                config,
+                searcher=FakeSearcher(),
+                identifier=FakeIdentifier(),
+                nlp=_test_nlp(),
+            )
+        )
 
         finished = [e for e in events if isinstance(e, PipelineFinished)][0]
         summary = finished.summary
@@ -327,12 +329,15 @@ class TestProcessEventStream:
         text = "На перевале росла огромная липа."
         searcher = FakeSearcher({"липа": [_linden_match()]})
 
-        events = list(process(
-            text, config,
-            searcher=searcher,
-            identifier=FakeIdentifier(identify_all=True),
-            nlp=_test_nlp(),
-        ))
+        events = list(
+            process(
+                text,
+                config,
+                searcher=searcher,
+                identifier=FakeIdentifier(identify_all=True),
+                nlp=_test_nlp(),
+            )
+        )
 
         results = [e for e in events if isinstance(e, ResultReady)]
         assert len(results) >= 1
@@ -353,7 +358,8 @@ class TestProcessAll:
         searcher = FakeSearcher({"липа": [_linden_match()]})
 
         results = process_all(
-            text, config,
+            text,
+            config,
             searcher=searcher,
             identifier=FakeIdentifier(identify_all=True),
             nlp=_test_nlp(),
@@ -366,7 +372,8 @@ class TestProcessAll:
     def test_empty_text_returns_empty_list(self, tmp_path: Path) -> None:
         config = _minimal_config(tmp_path)
         results = process_all(
-            "Нет ни одного таксона.", config,
+            "Нет ни одного таксона.",
+            config,
             searcher=FakeSearcher(),
             identifier=FakeIdentifier(),
             nlp=_test_nlp(),
@@ -417,7 +424,6 @@ def _unidentified_result() -> TaxonResult:
 
 
 class TestFormatDeduplicated:
-
     def test_envelope_has_version_and_results(self) -> None:
         output = format_deduplicated([_sample_result()])
         assert output["version"] == "1.0"
@@ -470,7 +476,6 @@ class TestFormatDeduplicated:
 
 
 class TestFormatFull:
-
     def test_envelope_has_version(self) -> None:
         output = format_full([_sample_result()])
         assert output["version"] == "1.0"
@@ -528,7 +533,8 @@ class TestPipelineIntegration:
         searcher = FakeSearcher()  # no responses configured
 
         results = process_all(
-            text, config,
+            text,
+            config,
             searcher=searcher,
             identifier=FakeIdentifier(identify_all=True),
             nlp=_test_nlp(),
@@ -544,12 +550,15 @@ class TestPipelineIntegration:
         text = "Простой текст без Tilia cordata."
 
         # With degraded mode, pipeline should not crash
-        events = list(process(
-            text, config,
-            searcher=FakeSearcher(),
-            identifier=FakeIdentifier(),
-            nlp=_test_nlp(),
-        ))
+        events = list(
+            process(
+                text,
+                config,
+                searcher=FakeSearcher(),
+                identifier=FakeIdentifier(),
+                nlp=_test_nlp(),
+            )
+        )
         finished = [e for e in events if isinstance(e, PipelineFinished)]
         assert len(finished) == 1
 
@@ -559,12 +568,15 @@ class TestPipelineIntegration:
         text = "Текст."
 
         with pytest.raises(FileNotFoundError):
-            list(process(
-                text, config,
-                searcher=FakeSearcher(),
-                identifier=FakeIdentifier(),
-                nlp=_test_nlp(),
-            ))
+            list(
+                process(
+                    text,
+                    config,
+                    searcher=FakeSearcher(),
+                    identifier=FakeIdentifier(),
+                    nlp=_test_nlp(),
+                )
+            )
 
     def test_confidence_filter(self, tmp_path: Path) -> None:
         """Results below confidence threshold should be filtered out."""
@@ -573,7 +585,8 @@ class TestPipelineIntegration:
 
         text = "Текст без таксонов но с ёлками."
         results = process_all(
-            text, config,
+            text,
+            config,
             searcher=FakeSearcher(),
             identifier=FakeIdentifier(),
             nlp=_test_nlp(),
@@ -588,25 +601,28 @@ class TestPipelineIntegration:
         config = _minimal_config(tmp_path)
         text = "Мы нашли Quercus robur в лесу."
 
-        searcher = FakeSearcher({
-            "quercus robur": [
-                TaxonMatch(
-                    taxon_id=50000,
-                    taxon_name="Quercus robur",
-                    taxon_rank="species",
-                    taxonomy=TaxonomyInfo(genus="Quercus", species="Quercus robur"),
-                    taxon_common_name_en="Pedunculate Oak",
-                    taxon_common_name_loc="Дуб черешчатый",
-                    taxon_matched_name="Quercus robur",
-                    taxon_url="https://www.inaturalist.org/taxa/50000",
-                    score=10.0,
-                    taxon_names=["Quercus robur"],
-                )
-            ],
-        })
+        searcher = FakeSearcher(
+            {
+                "quercus robur": [
+                    TaxonMatch(
+                        taxon_id=50000,
+                        taxon_name="Quercus robur",
+                        taxon_rank="species",
+                        taxonomy=TaxonomyInfo(genus="Quercus", species="Quercus robur"),
+                        taxon_common_name_en="Pedunculate Oak",
+                        taxon_common_name_loc="Дуб черешчатый",
+                        taxon_matched_name="Quercus robur",
+                        taxon_url="https://www.inaturalist.org/taxa/50000",
+                        score=10.0,
+                        taxon_names=["Quercus robur"],
+                    )
+                ],
+            }
+        )
 
         results = process_all(
-            text, config,
+            text,
+            config,
             searcher=searcher,
             identifier=FakeIdentifier(identify_all=True),
             nlp=_test_nlp(),
@@ -623,29 +639,34 @@ class TestPipelineIntegration:
 
         text = "Липа и ещё раз липа. А ещё Quercus robur."
 
-        searcher = FakeSearcher({
-            "quercus robur": [
-                TaxonMatch(
-                    taxon_id=50000,
-                    taxon_name="Quercus robur",
-                    taxon_rank="species",
-                    taxonomy=TaxonomyInfo(genus="Quercus", species="Quercus robur"),
-                    taxon_common_name_en="Oak",
-                    taxon_common_name_loc=None,
-                    taxon_matched_name="Quercus robur",
-                    taxon_url="https://www.inaturalist.org/taxa/50000",
-                    score=10.0,
-                    taxon_names=[],
-                )
-            ],
-        })
+        searcher = FakeSearcher(
+            {
+                "quercus robur": [
+                    TaxonMatch(
+                        taxon_id=50000,
+                        taxon_name="Quercus robur",
+                        taxon_rank="species",
+                        taxonomy=TaxonomyInfo(genus="Quercus", species="Quercus robur"),
+                        taxon_common_name_en="Oak",
+                        taxon_common_name_loc=None,
+                        taxon_matched_name="Quercus robur",
+                        taxon_url="https://www.inaturalist.org/taxa/50000",
+                        score=10.0,
+                        taxon_names=[],
+                    )
+                ],
+            }
+        )
 
-        events = list(process(
-            text, config,
-            searcher=searcher,
-            identifier=FakeIdentifier(identify_all=True),
-            nlp=_test_nlp(),
-        ))
+        events = list(
+            process(
+                text,
+                config,
+                searcher=searcher,
+                identifier=FakeIdentifier(identify_all=True),
+                nlp=_test_nlp(),
+            )
+        )
 
         finished = [e for e in events if isinstance(e, PipelineFinished)][0]
         summary = finished.summary
@@ -662,7 +683,8 @@ class TestPipelineIntegration:
         searcher = FakeSearcher({"липа": [_linden_match()]})
 
         results = process_all(
-            text, config,
+            text,
+            config,
             searcher=searcher,
             identifier=FakeIdentifier(identify_all=True),
             nlp=_test_nlp(),
@@ -831,7 +853,6 @@ class TestBuildResult:
 
 
 class TestMergeMatches:
-
     def test_deduplicates_by_taxon_id(self) -> None:
         from taxonfinder.pipeline import _merge_matches
 

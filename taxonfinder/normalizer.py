@@ -6,8 +6,7 @@ from typing import Protocol
 
 
 class MorphAnalyzer(Protocol):
-    def parse(self, word: str) -> Iterable[object]:
-        ...
+    def parse(self, word: str) -> Iterable[object]: ...
 
 
 _TOKEN_RE = re.compile(r"[A-Za-zА-Яа-яЁё]+")
