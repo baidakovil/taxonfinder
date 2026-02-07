@@ -47,4 +47,5 @@ testpaths = ["tests"]
 addopts = "-ra"
 markers = [
     "ollama: integration tests that require a running Ollama server",
+    "inaturalist_live: integration tests that call the live iNaturalist API",
 ]

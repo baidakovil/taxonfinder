@@ -33,7 +33,7 @@ class INaturalistSearcher:
     def _request(self, query: str, locale: str) -> dict[str, Any]:
         params = {"q": query, "locale": locale}
         url = f"{self.config.base_url.rstrip('/')}/v1/taxa/autocomplete"
-        last_response: httpx.Response | None = None
+
         for attempt in range(self.config.max_retries + 1):
             if self.rate_limiter is not None:
                 self.rate_limiter.acquire()
@@ -44,7 +44,6 @@ class INaturalistSearcher:
                 headers={"User-Agent": self.user_agent},
                 timeout=self.config.timeout,
             )
-            last_response = response
 
             if response.status_code == 200:
                 return response.json()
@@ -54,17 +53,13 @@ class INaturalistSearcher:
                     _sleep_backoff(attempt)
                     continue
 
-            break
-
-        # Exhausted retries or non-retryable error
-        message = "iNaturalist error"
-        if last_response is not None:
             raise httpx.HTTPStatusError(
-                f"{message}: {last_response.status_code}",
-                request=last_response.request,
-                response=last_response,
+                f"iNaturalist error: {response.status_code}",
+                request=response.request,
+                response=response,
             )
-        raise httpx.HTTPError(message)
+
+        return {"results": []}
 
 
 def _sleep_backoff(attempt: int) -> None:
@@ -83,8 +78,7 @@ def _parse_matches(data: dict[str, Any], locale: str, query: str) -> list[TaxonM
         matched_name = str(result.get("matched_name") or result.get("matched_term") or query)
         taxon_url = result.get("uri") or f"https://www.inaturalist.org/taxa/{taxon_id}"
         score = float(result.get("score") or 0)
-        names = result.get("names")
-        taxon_names = _extract_names(names)
+        taxon_names = _extract_names(result.get("names"))
 
         matches.append(
             TaxonMatch(
@@ -92,8 +86,8 @@ def _parse_matches(data: dict[str, Any], locale: str, query: str) -> list[TaxonM
                 taxon_name=taxon_name,
                 taxon_rank=taxon_rank,
                 taxonomy=_taxonomy_from_result(result),
-                taxon_common_name_en=_extract_common_name_en(result, names),
-                taxon_common_name_loc=_extract_locale_common_name(names, locale),
+                taxon_common_name_en=_extract_common_name(result.get("preferred_common_name")),
+                taxon_common_name_loc=_extract_locale_common_name(result, locale),
                 taxon_matched_name=matched_name,
                 taxon_url=str(taxon_url),
                 score=score,
@@ -102,40 +96,21 @@ def _parse_matches(data: dict[str, Any], locale: str, query: str) -> list[TaxonM
         )
     return matches
 
-def _extract_common_name_en(result: dict[str, Any], names: Any) -> str | None:
-    """Prefer an English common name regardless of request locale."""
 
-    if isinstance(names, list):
-        preferred: str | None = None
-        fallback: str | None = None
-        for item in names:
-            if item.get("locale") != "en" or not item.get("name"):
-                continue
-            if item.get("is_preferred"):
-                preferred = item["name"]
-                break
-            if fallback is None:
-                fallback = item["name"]
-        if preferred:
-            return preferred
-        if fallback:
-            return fallback
-
-    value = result.get("preferred_common_name")
+def _extract_common_name(value: Any) -> str | None:
+    if isinstance(value, dict):
+        return value.get("name")
     if isinstance(value, str):
         return value
-    if isinstance(value, dict):  # non-standard, but keep compatibility with tests
-        return value.get("name")
     return None
 
 
-def _extract_locale_common_name(names: Any, locale: str) -> str | None:
-    if not isinstance(names, list):
-        return None
+def _extract_locale_common_name(result: dict[str, Any], locale: str) -> str | None:
+    names = result.get("names") or []
     for item in names:
         if item.get("locale") == locale and item.get("name"):
             return item.get("name")
-    return None
+    return _extract_common_name(result.get("preferred_common_name"))
 
 
 def _extract_names(items: Any) -> list[str]:
@@ -149,29 +124,34 @@ def _extract_names(items: Any) -> list[str]:
 
 
 def _taxonomy_from_result(result: dict[str, Any]) -> TaxonomyInfo:
-    fields: dict[str, str | None] = {
-        "kingdom": None,
-        "phylum": None,
-        "class_": None,
-        "order": None,
-        "family": None,
-        "genus": None,
-        "species": None,
-    }
+    taxonomy = TaxonomyInfo()
 
     for ancestor in result.get("ancestors", []) or []:
-        _assign_rank(fields, ancestor.get("rank"), ancestor.get("name"))
+        rank = ancestor.get("rank")
+        name = ancestor.get("name")
+        _assign_rank(taxonomy, rank, name)
 
-    _assign_rank(fields, result.get("rank"), result.get("name"))
-    return TaxonomyInfo(**fields)
+    _assign_rank(taxonomy, result.get("rank"), result.get("name"))
+    return taxonomy
 
 
-def _assign_rank(target: dict[str, str | None], rank: str | None, name: str | None) -> None:
+def _assign_rank(taxonomy: TaxonomyInfo, rank: str | None, name: str | None) -> None:
     if not rank or not name:
         return
-    key = "class_" if rank == "class" else rank
-    if key in target:
-        target[key] = name
+    if rank == "kingdom":
+        taxonomy.kingdom = name
+    elif rank == "phylum":
+        taxonomy.phylum = name
+    elif rank == "class":
+        taxonomy.class_ = name
+    elif rank == "order":
+        taxonomy.order = name
+    elif rank == "family":
+        taxonomy.family = name
+    elif rank == "genus":
+        taxonomy.genus = name
+    elif rank == "species":
+        taxonomy.species = name
 
 
 __all__ = ["INaturalistSearcher"]

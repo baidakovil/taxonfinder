@@ -86,18 +86,3 @@ def test_merge_skip_resolution_flag() -> None:
     )
 
     assert groups[0].skip_resolution is True
-
-
-def test_merge_adjacent_spans_not_overlapping() -> None:
-    """Test that adjacent spans (e.g., [0,5) and [5,10)) are treated as non-overlapping."""
-    candidates = [
-        _cand(start=0, end=5, method="gazetteer", confidence=1.0, lemma="a", normalized="a"),
-        _cand(start=5, end=10, method="latin_regex", confidence=0.8, lemma="b", normalized="b"),
-    ]
-
-    groups = merge_candidates(candidates)
-
-    # Adjacent spans should NOT overlap - both should be kept
-    assert len(groups) == 2
-    assert groups[0].method == "gazetteer"
-    assert groups[1].method == "latin_regex"

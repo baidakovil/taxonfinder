@@ -2,16 +2,26 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import structlog
 
-from ..config import LlmExtractorConfig
 from ..models import Candidate
 from ..normalizer import lemmatize, normalize
 from .llm_client import LlmClient, LlmError
+
+
+@dataclass(slots=True)
+class LlmExtractorConfig:
+    provider: str
+    model: str
+    prompt_file: str
+    timeout: float
+    chunk_strategy: str
+    min_chunk_words: int
+    max_chunk_words: int
 
 
 class LlmExtractorPhase:
@@ -43,7 +53,6 @@ class LlmExtractorPhase:
             sentence_splitter=self._sentence_splitter,
         )
         candidates: list[Candidate] = []
-        used_spans: set[tuple[int, int]] = set()
         for chunk in chunks:
             response = self._call_llm(chunk)
             items = response.get("candidates", [])
@@ -52,8 +61,7 @@ class LlmExtractorPhase:
                 context = str(item.get("context", "")).strip()
                 if not name:
                     continue
-                start_char, end_char = _find_span(text, name, used_spans)
-                used_spans.add((start_char, end_char))
+                start_char, end_char = _find_span(text, name)
                 line_number = _line_number(text, start_char)
                 candidates.append(
                     Candidate(
@@ -171,6 +179,7 @@ def chunk_text(
                     buffer_words = 0
                 continue
 
+            chunks.append(paragraph)
         if buffer:
             chunks.append("\n\n".join(buffer))
         return chunks
@@ -234,41 +243,13 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def _find_span(
-    text: str, name: str, used_spans: set[tuple[int, int]] | None = None
-) -> tuple[int, int]:
-    """Find next unused span for name in text."""
-    if used_spans is None:
-        used_spans = set()
-
-    # Try case-sensitive first
-    offset = 0
-    while True:
-        index = text.find(name, offset)
-        if index != -1:
-            span = (index, index + len(name))
-            if span not in used_spans:
-                return span
-            offset = index + 1
-        else:
-            break
-
-    # Try case-insensitive
-    name_lower = name.lower()
-    text_lower = text.lower()
-    offset = 0
-    while True:
-        index = text_lower.find(name_lower, offset)
-        if index != -1:
-            span = (index, index + len(name))
-            if span not in used_spans:
-                return span
-            offset = index + 1
-        else:
-            break
-
-    # Fallback: return position at start
-    return 0, len(name)
+def _find_span(text: str, name: str) -> tuple[int, int]:
+    index = text.find(name)
+    if index == -1:
+        index = text.lower().find(name.lower())
+    if index == -1:
+        return 0, len(name)
+    return index, index + len(name)
 
 
 def _line_context(text: str, start: int) -> str:

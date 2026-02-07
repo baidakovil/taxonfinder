@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Sequence
 
 import structlog
 
-from ..config import LlmEnricherConfig
 from ..models import CandidateGroup, LlmEnrichmentResponse
 from ..normalizer import normalize
 from .llm_client import LlmClient, LlmError
+
+
+@dataclass(slots=True)
+class LlmEnricherConfig:
+    provider: str
+    model: str
+    prompt_file: str
+    timeout: float
 
 
 @dataclass(slots=True)
@@ -185,41 +191,13 @@ def _build_spans(text: str, sentences: list[str]) -> list[SentenceSpan]:
     return spans
 
 
-def _find_span(
-    text: str, needle: str, used_spans: set[tuple[int, int]] | None = None
-) -> tuple[int, int]:
-    """Find next unused span for needle in text."""
-    if used_spans is None:
-        used_spans = set()
-
-    # Try case-sensitive first
-    offset = 0
-    while True:
-        index = text.find(needle, offset)
-        if index != -1:
-            span = (index, index + len(needle))
-            if span not in used_spans:
-                return span
-            offset = index + 1
-        else:
-            break
-
-    # Try case-insensitive
-    needle_lower = needle.lower()
-    text_lower = text.lower()
-    offset = 0
-    while True:
-        index = text_lower.find(needle_lower, offset)
-        if index != -1:
-            span = (index, index + len(needle))
-            if span not in used_spans:
-                return span
-            offset = index + 1
-        else:
-            break
-
-    # Fallback: return position at start
-    return 0, len(needle)
+def _find_span(text: str, needle: str) -> tuple[int, int]:
+    index = text.find(needle)
+    if index == -1:
+        index = text.lower().find(needle.lower())
+    if index == -1:
+        return 0, len(needle)
+    return index, index + len(needle)
 
 
 def _line_context(text: str, start: int) -> str:

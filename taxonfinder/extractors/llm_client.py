@@ -141,14 +141,10 @@ class AnthropicClient:
             "max_tokens": 1024,
         }
         if response_schema is not None:
-            payload["tools"] = [
-                {
-                    "name": "response",
-                    "description": "Return JSON matching the schema",
-                    "input_schema": response_schema,
-                }
-            ]
-            payload["tool_choice"] = {"type": "tool", "name": "response"}
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": response_schema,
+            }
 
         response = self.http.post(url, headers=headers, json=payload, timeout=self.timeout)
         if response.status_code >= 400:
@@ -156,11 +152,7 @@ class AnthropicClient:
 
         data = response.json()
         try:
-            content = data["content"][0]
-            if content.get("type") == "tool_use":
-                # Anthropic tool use: input already structured; return JSON string
-                return json.dumps(content.get("input", {}))
-            return content["text"]
+            return data["content"][0]["text"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LlmError("Anthropic response missing content") from exc
 

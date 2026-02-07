@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -61,9 +61,8 @@ class DiskCache:
             if row is None:
                 return None
 
-            created_at = _parse_iso_datetime(row["created_at"])
-            now = datetime.now(timezone.utc)
-            if now - created_at > timedelta(days=self._config.ttl_days):
+            created_at = datetime.fromisoformat(row["created_at"])
+            if datetime.utcnow() - created_at > timedelta(days=self._config.ttl_days):
                 conn.execute(
                     "DELETE FROM api_cache WHERE query = ? AND locale = ?",
                     (query, locale),
@@ -74,27 +73,14 @@ class DiskCache:
 
     def put(self, query: str, locale: str, response: dict[str, Any]) -> None:
         payload = json.dumps(response, ensure_ascii=False)
-        created_at = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO api_cache (query, locale, response_json, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
-                (query, locale, payload, created_at),
+                (query, locale, payload, datetime.utcnow().isoformat()),
             )
-
-
-def _parse_iso_datetime(value: str) -> datetime:
-    """Parse ISO datetime as UTC-aware value.
-
-    SQLite may store naive timestamps; in that case we assume UTC.
-    """
-
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
 
 
 __all__ = ["DiskCache", "DiskCacheConfig"]

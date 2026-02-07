@@ -6,7 +6,7 @@ from typing import Any, Literal
 ExtractionMethod = Literal["gazetteer", "latin_regex", "llm"]
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Candidate:
     source_text: str
     source_context: str
@@ -27,7 +27,7 @@ class Candidate:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Occurrence:
     line_number: int
     source_text: str
@@ -49,7 +49,7 @@ class Occurrence:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class CandidateGroup:
     normalized: str
     lemmatized: str
@@ -59,31 +59,8 @@ class CandidateGroup:
     gazetteer_taxon_ids: list[int]
     skip_resolution: bool
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "normalized": self.normalized,
-            "lemmatized": self.lemmatized,
-            "method": self.method,
-            "confidence": self.confidence,
-            "occurrences": [occ.to_dict() for occ in self.occurrences],
-            "gazetteer_taxon_ids": list(self.gazetteer_taxon_ids),
-            "skip_resolution": self.skip_resolution,
-        }
 
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> CandidateGroup:
-        return CandidateGroup(
-            normalized=str(data["normalized"]),
-            lemmatized=str(data["lemmatized"]),
-            method=data["method"],
-            confidence=float(data["confidence"]),
-            occurrences=[Occurrence.from_dict(item) for item in data.get("occurrences", [])],
-            gazetteer_taxon_ids=list(data.get("gazetteer_taxon_ids", [])),
-            skip_resolution=bool(data["skip_resolution"]),
-        )
-
-
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class TaxonomyInfo:
     kingdom: str | None = None
     phylum: str | None = None
@@ -117,7 +94,7 @@ class TaxonomyInfo:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class TaxonMatch:
     taxon_id: int
     taxon_name: str
@@ -159,7 +136,7 @@ class TaxonMatch:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class LlmEnrichmentResponse:
     common_names_loc: list[str] = field(default_factory=list)
     common_names_en: list[str] = field(default_factory=list)
@@ -181,7 +158,7 @@ class LlmEnrichmentResponse:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class ResolvedCandidate:
     group: CandidateGroup
     matches: list[TaxonMatch]
@@ -192,7 +169,7 @@ class ResolvedCandidate:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "group": self.group.to_dict(),
+            "group": self.group,
             "matches": [match.to_dict() for match in self.matches],
             "identified": self.identified,
             "llm_response": None if self.llm_response is None else self.llm_response.to_dict(),
@@ -204,7 +181,7 @@ class ResolvedCandidate:
     def from_dict(data: dict[str, Any]) -> ResolvedCandidate:
         llm_data = data.get("llm_response")
         return ResolvedCandidate(
-            group=CandidateGroup.from_dict(data["group"]),
+            group=data["group"],
             matches=[TaxonMatch.from_dict(item) for item in data.get("matches", [])],
             identified=bool(data["identified"]),
             llm_response=None if llm_data is None else LlmEnrichmentResponse.from_dict(llm_data),
@@ -213,7 +190,7 @@ class ResolvedCandidate:
         )
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class TaxonResult:
     source_text: str
     identified: bool
@@ -235,7 +212,6 @@ class TaxonResult:
             "identified": self.identified,
             "extraction_confidence": self.extraction_confidence,
             "extraction_method": self.extraction_method,
-            "count": self.count,
             "occurrences": [occ.to_dict() for occ in self.occurrences],
             "matches": [match.to_dict() for match in self.matches],
             "llm_response": None if self.llm_response is None else self.llm_response.to_dict(),

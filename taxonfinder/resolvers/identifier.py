@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from ..models import CandidateGroup, TaxonMatch
-from ..normalizer import lemmatize, normalize
+from ..normalizer import normalize
 
 
 class DefaultIdentificationResolver:
-    def __init__(self, morph: object | None = None):
-        self.morph = morph
-
     def resolve(self, group: CandidateGroup, matches: list[TaxonMatch]) -> tuple[bool, str]:
         if not matches:
             return False, "No matches in iNaturalist"
@@ -16,7 +13,7 @@ class DefaultIdentificationResolver:
         lemmatized = group.lemmatized
 
         for match in matches:
-            if _match_name(normalized, lemmatized, match, self.morph):
+            if _match_name(normalized, lemmatized, match):
                 return True, ""
 
         if len(matches) > 1:
@@ -25,14 +22,12 @@ class DefaultIdentificationResolver:
         return False, "Common name not matched"
 
 
-def _match_name(
-    normalized: str, lemmatized: str, match: TaxonMatch, morph: object | None
-) -> bool:
-    candidates = _match_candidates(match, morph)
+def _match_name(normalized: str, lemmatized: str, match: TaxonMatch) -> bool:
+    candidates = _match_candidates(match)
     return normalized in candidates or lemmatized in candidates
 
 
-def _match_candidates(match: TaxonMatch, morph: object | None) -> set[str]:
+def _match_candidates(match: TaxonMatch) -> set[str]:
     values = [
         match.taxon_matched_name,
         match.taxon_name,
@@ -40,16 +35,7 @@ def _match_candidates(match: TaxonMatch, morph: object | None) -> set[str]:
         match.taxon_common_name_loc or "",
     ]
     values.extend(match.taxon_names)
-
-    candidates: set[str] = set()
-    for value in values:
-        if value:
-            candidates.add(normalize(value))
-            # Also add lemmatized form
-            lemmatized_value = lemmatize(value, morph)
-            candidates.add(lemmatized_value)
-
-    return candidates
+    return {normalize(value) for value in values if value}
 
 
 __all__ = ["DefaultIdentificationResolver"]

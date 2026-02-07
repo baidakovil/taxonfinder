@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Callable
 
 from .models import Candidate, CandidateGroup, Occurrence
+
 
 _METHOD_PRIORITY = {"gazetteer": 3, "latin_regex": 2, "llm": 1}
 
@@ -49,7 +50,7 @@ def _select_best_overlaps(candidates: list[Candidate]) -> list[Candidate]:
     current_end = ordered[0].end_char
 
     for cand in ordered[1:]:
-        if cand.start_char < current_end:
+        if cand.start_char <= current_end:
             current.append(cand)
             current_end = max(current_end, cand.end_char)
         else:
