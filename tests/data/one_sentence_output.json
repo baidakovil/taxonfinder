@@ -1,11 +1,17 @@
 [
   {
-    "line_number": 1,
     "source_text": "липа",
-    "source_context": "На перевале росла огромная липа, растущая, словно великан, здесь уже более двух веков.",
     "identified": "yes",
     "extraction_confidence": 1.0,
     "extraction_method": "gazetteer",
+    "count": 1,
+    "occurrences": [
+      {
+        "line_number": 1,
+        "source_text": "липа",
+        "source_context": "На перевале росла огромная липа, растущая, словно великан, здесь уже более двух веков."
+      }
+    ],
     "matches": [
       {
         "taxon_id": 54586,

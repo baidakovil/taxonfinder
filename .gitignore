@@ -8,3 +8,8 @@ __pycache__/
 dist/
 build/
 .DS_Store
+
+# Generated data
+data/gazetteer.db
+cache/
+logs/

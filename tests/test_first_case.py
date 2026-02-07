@@ -14,20 +14,22 @@ def _load_fixture(name: str) -> list[dict]:
     return json.loads((DATA_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_first_case_contains_linden_taxon_id() -> None:
+# --- one_sentence: gazetteer exact match ---
+
+
+def test_one_sentence_contains_linden_taxon_id() -> None:
     output = _load_fixture("one_sentence_output.json")
 
     taxon_ids = {
         match["taxon_id"]
         for item in output
         for match in item.get("matches", [])
-        if "taxon_id" in match
     }
 
     assert 54586 in taxon_ids
 
 
-def test_first_case_has_extraction_confidence() -> None:
+def test_one_sentence_has_valid_confidence() -> None:
     output = _load_fixture("one_sentence_output.json")
 
     for item in output:
@@ -35,19 +37,39 @@ def test_first_case_has_extraction_confidence() -> None:
         assert 0.0 <= item["extraction_confidence"] <= 1.0
 
 
-def test_first_case_has_extraction_method() -> None:
+def test_one_sentence_has_valid_method() -> None:
     output = _load_fixture("one_sentence_output.json")
 
     valid_methods = {"gazetteer", "latin_regex", "llm"}
     for item in output:
-        assert "extraction_method" in item
         assert item["extraction_method"] in valid_methods
+
+
+def test_one_sentence_has_deduplicated_structure() -> None:
+    output = _load_fixture("one_sentence_output.json")
+
+    for item in output:
+        assert "count" in item
+        assert item["count"] >= 1
+        assert "occurrences" in item
+        assert len(item["occurrences"]) == item["count"]
+
+        for occ in item["occurrences"]:
+            assert "line_number" in occ
+            assert "source_text" in occ
+            assert "source_context" in occ
+
+
+# --- negative: no taxa found ---
 
 
 def test_negative_case_has_empty_output() -> None:
     output = _load_fixture("negative_sentence_output.json")
 
     assert output == []
+
+
+# --- ambiguous: unidentified with multiple matches ---
 
 
 def test_ambiguous_case_has_multiple_matches() -> None:
@@ -71,3 +93,12 @@ def test_ambiguous_case_has_candidate_names_and_reason() -> None:
             assert "reason" in item
             assert len(item["candidate_names"]) > 0
             assert len(item["reason"]) > 0
+
+
+def test_ambiguous_case_has_deduplicated_structure() -> None:
+    output = _load_fixture("ambiguous_sentence_output.json")
+
+    for item in output:
+        assert "count" in item
+        assert "occurrences" in item
+        assert len(item["occurrences"]) >= 1

@@ -12,18 +12,28 @@ alwaysApply: true
 - Add docstrings for public modules, classes, and functions.
 - Keep dependencies minimal and standard-library first.
 
+## Architecture Constraints
+
+- Pipeline core (`taxonfinder/`) is fully synchronous — no `asyncio` imports in core.
+- Use `httpx.Client` (sync) for HTTP in core modules.
+- Use `Protocol` for abstractions (TextLoader, LLM client).
+- Use dataclasses for models and pipeline events.
+- External APIs (iNaturalist, LLM) must be behind abstractions for testability.
+- Refer to `projectdescription.md` and `docs/` for architecture decisions.
+
 ## Testing Requirements
 
 - Write unit tests for new behavior and bug fixes.
 - Favor deterministic tests; avoid network and time dependencies.
+- Mock external services (iNaturalist API, LLM providers) in tests.
 - Use pytest and arrange/act/assert structure.
 - Name tests descriptively and cover edge cases.
+- Validate output fixtures against JSON schemas in `schemas/`.
 
 ## Formatting & Style
 
-- Follow PEP 8 and format with Black-compatible style.
-- Sort imports with isort-compatible grouping.
-- Keep lines reasonably short (<= 100 chars).
+- Format and lint with `ruff` (replaces Black + isort).
+- Follow PEP 8; keep lines <= 100 chars.
 
 ## AI Coding Workflow
 

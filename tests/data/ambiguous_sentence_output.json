@@ -1,11 +1,17 @@
 [
   {
-    "line_number": 1,
     "source_text": "дикая коза",
-    "source_context": "В общем, дикая коза — пугливое животное, вечно преследуемое четвероногими хищниками и человеком.",
     "identified": "no",
-    "extraction_confidence": 0.7,
+    "extraction_confidence": 0.6,
     "extraction_method": "llm",
+    "count": 1,
+    "occurrences": [
+      {
+        "line_number": 1,
+        "source_text": "дикая коза",
+        "source_context": "В общем, дикая коза — пугливое животное, вечно преследуемое четвероногими хищниками и человеком."
+      }
+    ],
     "matches": [
       {
         "taxon_id": 12345,
