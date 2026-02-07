@@ -55,8 +55,24 @@ def test_merge_overlapping_prefers_method_on_tie() -> None:
 
 def test_merge_splits_disjoint_gazetteer_ids() -> None:
     candidates = [
-        _cand(start=0, end=4, method="gazetteer", confidence=1.0, lemma="a", normalized="a", ids=[1]),
-        _cand(start=6, end=10, method="gazetteer", confidence=1.0, lemma="a", normalized="a", ids=[2]),
+        _cand(
+            start=0,
+            end=4,
+            method="gazetteer",
+            confidence=1.0,
+            lemma="a",
+            normalized="a",
+            ids=[1],
+        ),
+        _cand(
+            start=6,
+            end=10,
+            method="gazetteer",
+            confidence=1.0,
+            lemma="a",
+            normalized="a",
+            ids=[2],
+        ),
     ]
 
     groups = merge_candidates(candidates)
@@ -66,8 +82,24 @@ def test_merge_splits_disjoint_gazetteer_ids() -> None:
 
 def test_merge_allows_empty_gazetteer_ids() -> None:
     candidates = [
-        _cand(start=0, end=4, method="gazetteer", confidence=1.0, lemma="a", normalized="a", ids=[1]),
-        _cand(start=6, end=10, method="llm", confidence=0.6, lemma="a", normalized="a", ids=[]),
+        _cand(
+            start=0,
+            end=4,
+            method="gazetteer",
+            confidence=1.0,
+            lemma="a",
+            normalized="a",
+            ids=[1],
+        ),
+        _cand(
+            start=6,
+            end=10,
+            method="llm",
+            confidence=0.6,
+            lemma="a",
+            normalized="a",
+            ids=[],
+        ),
     ]
 
     groups = merge_candidates(candidates)
@@ -77,7 +109,15 @@ def test_merge_allows_empty_gazetteer_ids() -> None:
 
 def test_merge_skip_resolution_flag() -> None:
     candidates = [
-        _cand(start=0, end=4, method="gazetteer", confidence=1.0, lemma="a", normalized="a", ids=[1]),
+        _cand(
+            start=0,
+            end=4,
+            method="gazetteer",
+            confidence=1.0,
+            lemma="a",
+            normalized="a",
+            ids=[1],
+        ),
     ]
 
     groups = merge_candidates(

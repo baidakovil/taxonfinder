@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from .models import Candidate, CandidateGroup, Occurrence
-
 
 _METHOD_PRIORITY = {"gazetteer": 3, "latin_regex": 2, "llm": 1}
 

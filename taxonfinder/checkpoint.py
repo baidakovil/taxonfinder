@@ -16,7 +16,7 @@ class FileCheckpoint:
 
     def key(self, text: str, config: Config) -> str:
         config_json = json.dumps(asdict(config), sort_keys=True, ensure_ascii=True)
-        payload = f"{text}\n{config_json}".encode("utf-8")
+        payload = f"{text}\n{config_json}".encode()
         return hashlib.sha256(payload).hexdigest()
 
     def save(self, key: str, data: dict[str, Any]) -> Path:

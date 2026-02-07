@@ -167,6 +167,21 @@
           "maximum": 2000,
           "default": 500,
           "description": "Maximum chunk size in words. Larger chunks are split by sentence boundaries."
+        },
+        "auto_start": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ollama only: start local ollama serve automatically if not reachable."
+        },
+        "auto_pull_model": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ollama only: run 'ollama pull <model>' if model is missing before processing."
+        },
+        "stop_after_run": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ollama only: stop the ollama process started automatically after the run finishes."
         }
       }
     },
@@ -208,6 +223,21 @@
           "minLength": 1,
           "default": "prompts/llm_enricher.txt",
           "description": "Path to the LLM enricher prompt file (relative to project root)."
+        },
+        "auto_start": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ollama only: start local ollama serve automatically if not reachable."
+        },
+        "auto_pull_model": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ollama only: run 'ollama pull <model>' if model is missing before processing."
+        },
+        "stop_after_run": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ollama only: stop the ollama process started automatically after the run finishes."
         }
       }
     }

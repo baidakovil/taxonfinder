@@ -68,7 +68,7 @@ def test_storage_get_taxon_ids(tmp_path: Path) -> None:
     """Test get_taxon_ids returns list of taxon IDs for normalized name."""
     db_path = tmp_path / "gazetteer.db"
     _create_db(db_path)
-    
+
     with sqlite3.connect(db_path) as conn:
         # Add another common name for same taxon
         conn.execute(
@@ -86,15 +86,14 @@ def test_storage_get_taxon_ids(tmp_path: Path) -> None:
         )
 
     storage = GazetteerStorage(db_path)
-    
     # Single taxon ID
     ids = storage.get_taxon_ids("tilia cordata", "en")
     assert ids == [1]
-    
+
     # Multiple taxon IDs (ambiguous name)
     ids = storage.get_taxon_ids("linden", "en")
     assert set(ids) == {1, 2}
-    
+
     # Non-existent name
     ids = storage.get_taxon_ids("nonexistent", "en")
     assert ids == []
@@ -106,7 +105,7 @@ def test_storage_get_full_record(tmp_path: Path) -> None:
     _create_db(db_path)
 
     storage = GazetteerStorage(db_path)
-    
+
     # Existing record
     record = storage.get_full_record(1, locale="ru")
     assert record is not None
@@ -116,7 +115,7 @@ def test_storage_get_full_record(tmp_path: Path) -> None:
     assert record.ancestry == '{"kingdom": "Plantae"}'
     assert record.taxon_common_name_en == "Tilia cordata"
     assert record.taxon_common_name_loc is None
-    
+
     # Non-existent record
     record = storage.get_full_record(999, locale="ru")
     assert record is None

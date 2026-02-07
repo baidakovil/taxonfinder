@@ -5,6 +5,7 @@ Uses mock searcher and LLM client to avoid real HTTP requests.
 """
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from pathlib import Path
@@ -16,11 +17,8 @@ import spacy
 
 from taxonfinder.config import Config, InaturalistConfig
 from taxonfinder.events import (
-    PipelineEstimate,
-    PipelineEvent,
-    PipelineFinished,
-    PhaseProgress,
     PhaseStarted,
+    PipelineFinished,
     PipelineSummary,
     ResultReady,
 )
@@ -33,6 +31,7 @@ from taxonfinder.models import (
     TaxonomyInfo,
     TaxonResult,
 )
+from taxonfinder.normalizer import normalize
 from taxonfinder.pipeline import (
     format_deduplicated,
     format_full,
@@ -40,12 +39,12 @@ from taxonfinder.pipeline import (
     process_all,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / Mocks
 # ---------------------------------------------------------------------------
 
 SCHEMAS_DIR = Path(__file__).resolve().parent.parent / "schemas"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "txt_samples"
 
 
 def _test_nlp():
@@ -161,10 +160,15 @@ def _create_test_db(path: Path) -> None:
                 is_preferred BOOLEAN DEFAULT 0,
                 lexicon TEXT
             );
-            INSERT INTO taxa VALUES (54586, 'Tilia', 'genus', '48460/47126/211194/47125/47124');
-            INSERT INTO common_names (taxon_id, name, name_normalized, name_lemmatized, locale, is_preferred)
+            INSERT INTO taxa
+                VALUES (54586, 'Tilia', 'genus', '48460/47126/211194/47125/47124');
+            INSERT INTO common_names (
+                taxon_id, name, name_normalized, name_lemmatized, locale, is_preferred
+            )
                 VALUES (54586, 'Липа', 'липа', 'липа', 'ru', 1);
-            INSERT INTO common_names (taxon_id, name, name_normalized, name_lemmatized, locale, is_preferred)
+            INSERT INTO common_names (
+                taxon_id, name, name_normalized, name_lemmatized, locale, is_preferred
+            )
                 VALUES (54586, 'Lindens', 'lindens', 'linden', 'en', 1);
             """
         )
@@ -189,6 +193,82 @@ def _minimal_config(
             cache_enabled=False,
         ),
     )
+
+
+def _load_ulov_rows(csv_path: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    with csv_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def _create_ulov_gazetteer_db(csv_path: Path, db_path: Path) -> None:
+    rows = _load_ulov_rows(csv_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA user_version = 1")
+        conn.executescript(
+            """
+            CREATE TABLE taxa (
+                taxon_id INTEGER PRIMARY KEY,
+                taxon_name TEXT NOT NULL,
+                taxon_rank TEXT NOT NULL,
+                ancestry TEXT
+            );
+            CREATE TABLE common_names (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                taxon_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                name_normalized TEXT NOT NULL,
+                name_lemmatized TEXT,
+                locale TEXT NOT NULL,
+                is_preferred BOOLEAN DEFAULT 0,
+                lexicon TEXT
+            );
+            """
+        )
+
+        for row in rows:
+            taxon_id = int(row["taxon_id"]) if row.get("taxon_id") else None
+            taxon_name = (row.get("taxon_name") or "").strip()
+            taxon_rank = (row.get("rank") or "").strip().lower() or "species"
+            src = (row.get("source_text") or "").strip()
+            if not taxon_id or not taxon_name or not src:
+                continue
+
+            conn.execute(
+                "INSERT INTO taxa (taxon_id, taxon_name, taxon_rank, ancestry)"
+                " VALUES (?, ?, ?, ?)",
+                (taxon_id, taxon_name, taxon_rank, None),
+            )
+
+            variants = [v.strip() for v in src.replace("—", ",").split(",")]
+            for idx, variant in enumerate(variant for variant in variants if variant):
+                name_norm = normalize(variant)
+                conn.execute(
+                    """
+                    INSERT INTO common_names (
+                        taxon_id, name, name_normalized, name_lemmatized,
+                        locale, is_preferred, lexicon
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        taxon_id,
+                        variant,
+                        name_norm,
+                        name_norm,
+                        "ru",
+                        1 if idx == 0 else 0,
+                        None,
+                    ),
+                )
+
+
+def _expected_ulov_taxon_ids(csv_path: Path) -> set[int]:
+    return {
+        int(row["taxon_id"]) for row in _load_ulov_rows(csv_path) if row.get("taxon_id")
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +664,74 @@ class TestPipelineIntegration:
         results = process_all(
             text, config,
             searcher=searcher,
+            identifier=FakeIdentifier(identify_all=True),
+            nlp=_test_nlp(),
+        )
+
+        schema_path = SCHEMAS_DIR / "output-deduplicated.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        output = format_deduplicated(results)
+        jsonschema.validate(output, schema)
+
+
+# ---------------------------------------------------------------------------
+# Tests: Realistic sample (улов) via gazetteer-only path
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineUlovSample:
+    """Use real text sample and synthetic gazetteer derived from CSV mapping."""
+
+    def _ulov_config(self, tmp_path: Path, gazetteer_path: str) -> Config:
+        return Config(
+            confidence=0.3,
+            locale="ru",
+            gazetteer_path=gazetteer_path,
+            spacy_model="ru_core_news_sm",
+            max_file_size_mb=5.0,
+            degraded_mode=False,
+            user_agent="TaxonFinder/0.1.0-test",
+            inaturalist=InaturalistConfig(cache_enabled=False),
+            llm_extractor=None,
+            llm_enricher=None,
+        )
+
+    def test_ulov_gazetteer_pipeline(self, tmp_path: Path) -> None:
+        csv_path = DATA_DIR / "улов_results.csv"
+        text_path = DATA_DIR / "улов.txt"
+        db_path = tmp_path / "gazetteer.db"
+        _create_ulov_gazetteer_db(csv_path, db_path)
+
+        config = self._ulov_config(tmp_path, str(db_path))
+        text = text_path.read_text(encoding="utf-8")
+
+        results = process_all(
+            text,
+            config,
+            searcher=FakeSearcher(),
+            identifier=FakeIdentifier(identify_all=True),
+            nlp=_test_nlp(),
+        )
+
+        expected_ids = _expected_ulov_taxon_ids(csv_path)
+        found_ids = {m.taxon_id for r in results for m in r.matches}
+
+        assert expected_ids.issubset(found_ids)
+        assert len(results) >= len(expected_ids)
+
+    def test_ulov_output_validates_schema(self, tmp_path: Path) -> None:
+        csv_path = DATA_DIR / "улов_results.csv"
+        text_path = DATA_DIR / "улов.txt"
+        db_path = tmp_path / "gazetteer.db"
+        _create_ulov_gazetteer_db(csv_path, db_path)
+
+        config = self._ulov_config(tmp_path, str(db_path))
+        text = text_path.read_text(encoding="utf-8")
+
+        results = process_all(
+            text,
+            config,
+            searcher=FakeSearcher(),
             identifier=FakeIdentifier(identify_all=True),
             nlp=_test_nlp(),
         )

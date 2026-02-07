@@ -5,8 +5,9 @@ This module only calls them in the right order and yields PipelineEvent.
 """
 from __future__ import annotations
 
+import subprocess
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from .extractors.latin import LatinRegexExtractor, SentenceSpan
 from .extractors.llm_client import (
     AnthropicClient,
     LlmClient,
+    LlmError,
     OllamaClient,
     OpenAIClient,
 )
@@ -48,7 +50,7 @@ from .models import (
     TaxonomyInfo,
     TaxonResult,
 )
-from .normalizer import normalize
+from .normalizer import normalize, search_variants
 from .rate_limiter import TokenBucketRateLimiter
 from .resolvers.base import IdentificationResolver, TaxonSearcher
 from .resolvers.cache import DiskCache, DiskCacheConfig
@@ -80,6 +82,7 @@ def process(
     """
     start_total = time.monotonic()
     phase_times: dict[str, float] = {}
+    cleanup_callbacks: list[Callable[[], None]] = []
 
     # --- build dependencies ------------------------------------------------
     if nlp is None:
@@ -194,9 +197,14 @@ def process(
         # --- LLM extractor ---
         llm_candidates: list[Candidate] = []
         if config.llm_extractor is not None and config.llm_extractor.enabled:
-            llm_ext_client = llm_client or _build_llm_client(
-                config.llm_extractor, config, http_client,
-            )
+            if llm_client is not None:
+                llm_ext_client = llm_client
+            else:
+                llm_ext_client, cleanup = _build_llm_client(
+                    config.llm_extractor, config, http_client,
+                )
+                if cleanup is not None:
+                    cleanup_callbacks.append(cleanup)
             ext_cfg = ExtractorCfg(
                 provider=config.llm_extractor.provider,
                 model=config.llm_extractor.model,
@@ -292,15 +300,22 @@ def process(
 
         # Resolve groups via iNaturalist API
         for idx, group in enumerate(to_resolve, 1):
-            matches = searcher.search(group.normalized, config.locale)
-            summary_data["api_calls"] += 1
-            identified, reason = identifier.resolve(group, matches)
+            variants = search_variants(group.normalized, morph)
+            matches: list[TaxonMatch] = []
+            identified = False
+            reason = "No matches in iNaturalist"
+
+            for var in variants:
+                new_matches = searcher.search(var, config.locale)
+                summary_data["api_calls"] += 1
+                matches = _merge_matches(matches, new_matches)
+                identified, reason = identifier.resolve(group, matches)
+                if identified:
+                    break
 
             candidate_names: list[str] = []
             if not identified:
-                candidate_names = [group.normalized]
-                if group.lemmatized != group.normalized:
-                    candidate_names.append(group.lemmatized)
+                candidate_names = list(variants)
 
             resolved.append(ResolvedCandidate(
                 group=group,
@@ -332,9 +347,14 @@ def process(
 
         if enricher_enabled:
             assert config.llm_enricher is not None
-            enricher_client = llm_client or _build_llm_client(
-                config.llm_enricher, config, http_client,
-            )
+            if llm_client is not None:
+                enricher_client = llm_client
+            else:
+                enricher_client, cleanup = _build_llm_client(
+                    config.llm_enricher, config, http_client,
+                )
+                if cleanup is not None:
+                    cleanup_callbacks.append(cleanup)
             enr_cfg = EnricherCfg(
                 provider=config.llm_enricher.provider,
                 model=config.llm_enricher.model,
@@ -454,6 +474,12 @@ def process(
             # Save checkpoint before exiting
             pass
     finally:
+        for cb in reversed(cleanup_callbacks):
+            try:
+                cb()
+            except Exception:
+                name = cb.__name__ if hasattr(cb, "__name__") else "callback"
+                logger.warning("cleanup_failed", cleanup=name)
         if owns_http and http_client is not None:
             http_client.close()
 
@@ -706,46 +732,145 @@ def _collect_latin_names(storage: GazetteerStorage) -> set[str]:
         return set()
 
 
+def _prepare_ollama(
+    *,
+    http: httpx.Client,
+    base_url: str,
+    model: str,
+    auto_start: bool,
+    auto_pull: bool,
+    stop_after: bool,
+    timeout: float,
+) -> Callable[[], None] | None:
+    """Ensure Ollama is reachable and model exists; return cleanup callback if started."""
+
+    def _reachable() -> bool:
+        try:
+            resp = http.get(f"{base_url.rstrip('/')}/api/tags", timeout=5)
+            return resp.status_code < 500
+        except Exception:
+            return False
+
+    def _model_available() -> bool:
+        try:
+            resp = http.get(f"{base_url.rstrip('/')}/api/tags", timeout=5)
+            data = resp.json()
+            models = data.get("models", []) if isinstance(data, dict) else []
+            return any(m.get("name") == model for m in models if isinstance(m, dict))
+        except Exception:
+            return False
+
+    started_proc: subprocess.Popen[bytes] | None = None
+
+    if not _reachable() and auto_start:
+        logger.info("ollama_auto_start", base_url=base_url)
+        proc = subprocess.Popen(
+            ["ollama", "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        started_proc = proc
+        deadline = time.monotonic() + max(timeout, 5)
+        while time.monotonic() < deadline:
+            if _reachable():
+                logger.info("ollama_started", base_url=base_url)
+                break
+            time.sleep(0.5)
+        else:
+            proc.terminate()
+            raise LlmError(f"Failed to start ollama serve at {base_url}")
+
+    if not _reachable():
+        raise LlmError(
+            f"Ollama is not reachable at {base_url}. "
+            "Start 'ollama serve' or set auto_start=true in config."
+        )
+
+    if auto_pull and not _model_available():
+        logger.info("ollama_pull_model", model=model)
+        try:
+            subprocess.run(
+                ["ollama", "pull", model],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError as exc:
+            raise LlmError("Ollama CLI not found; please install Ollama.") from exc
+        except subprocess.CalledProcessError as exc:
+            raise LlmError(f"ollama pull failed for model {model}") from exc
+
+        if not _model_available():
+            raise LlmError(f"Model {model} is still unavailable after pull")
+
+    if started_proc is None or not stop_after:
+        return None
+
+    def _cleanup() -> None:
+        started_proc.terminate()
+
+    return _cleanup
+
+
 def _build_llm_client(
     llm_config: LlmExtractorConfig | LlmEnricherConfig,
     config: Config,
     http_client: httpx.Client | None,
-) -> LlmClient:
-    """Build an LlmClient from config."""
+) -> tuple[LlmClient, Callable[[], None] | None]:
+    """Build an LlmClient from config, returning optional cleanup callback."""
     import os
 
     http = http_client or httpx.Client(headers={"User-Agent": config.user_agent})
+    cleanup: Callable[[], None] | None = None
 
     if llm_config.provider == "ollama":
-        return OllamaClient(
-            base_url=llm_config.url or "http://localhost:11434",
-            model=llm_config.model,
-            timeout=llm_config.timeout,
+        base_url = llm_config.url or "http://localhost:11434"
+        cleanup = _prepare_ollama(
             http=http,
-            user_agent=config.user_agent,
+            base_url=base_url,
+            model=llm_config.model,
+            auto_start=llm_config.auto_start,
+            auto_pull=llm_config.auto_pull_model,
+            stop_after=llm_config.stop_after_run,
+            timeout=llm_config.timeout,
         )
-    elif llm_config.provider == "openai":
+        return (
+            OllamaClient(
+                base_url=base_url,
+                model=llm_config.model,
+                timeout=llm_config.timeout,
+                http=http,
+                user_agent=config.user_agent,
+            ),
+            cleanup,
+        )
+    if llm_config.provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY", "")
-        return OpenAIClient(
-            base_url=llm_config.url or "https://api.openai.com",
-            model=llm_config.model,
-            timeout=llm_config.timeout,
-            api_key=api_key,
-            http=http,
-            user_agent=config.user_agent,
+        return (
+            OpenAIClient(
+                base_url=llm_config.url or "https://api.openai.com",
+                model=llm_config.model,
+                timeout=llm_config.timeout,
+                api_key=api_key,
+                http=http,
+                user_agent=config.user_agent,
+            ),
+            None,
         )
-    elif llm_config.provider == "anthropic":
+    if llm_config.provider == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        return AnthropicClient(
-            base_url=llm_config.url or "https://api.anthropic.com",
-            model=llm_config.model,
-            timeout=llm_config.timeout,
-            api_key=api_key,
-            http=http,
-            user_agent=config.user_agent,
+        return (
+            AnthropicClient(
+                base_url=llm_config.url or "https://api.anthropic.com",
+                model=llm_config.model,
+                timeout=llm_config.timeout,
+                api_key=api_key,
+                http=http,
+                user_agent=config.user_agent,
+            ),
+            None,
         )
-    else:
-        raise ValueError(f"Unknown LLM provider: {llm_config.provider}")
+    raise ValueError(f"Unknown LLM provider: {llm_config.provider}")
 
 
 __all__ = [

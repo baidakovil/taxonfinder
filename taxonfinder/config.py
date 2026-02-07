@@ -31,6 +31,9 @@ class LlmExtractorConfig:
     chunk_strategy: str = "paragraph"
     min_chunk_words: int = 50
     max_chunk_words: int = 500
+    auto_start: bool = False
+    auto_pull_model: bool = False
+    stop_after_run: bool = False
 
 
 @dataclass
@@ -41,6 +44,9 @@ class LlmEnricherConfig:
     url: str | None = None
     timeout: float = 30
     prompt_file: str = "prompts/llm_enricher.txt"
+    auto_start: bool = False
+    auto_pull_model: bool = False
+    stop_after_run: bool = False
 
 
 @dataclass
@@ -129,6 +135,9 @@ def _load_llm_extractor(data: dict | None) -> LlmExtractorConfig | None:
         chunk_strategy=str(data.get("chunk_strategy", LlmExtractorConfig.chunk_strategy)),
         min_chunk_words=int(data.get("min_chunk_words", LlmExtractorConfig.min_chunk_words)),
         max_chunk_words=int(data.get("max_chunk_words", LlmExtractorConfig.max_chunk_words)),
+        auto_start=bool(data.get("auto_start", LlmExtractorConfig.auto_start)),
+        auto_pull_model=bool(data.get("auto_pull_model", LlmExtractorConfig.auto_pull_model)),
+        stop_after_run=bool(data.get("stop_after_run", LlmExtractorConfig.stop_after_run)),
     )
 
 
@@ -143,4 +152,7 @@ def _load_llm_enricher(data: dict | None) -> LlmEnricherConfig | None:
         url=data.get("url"),
         timeout=float(data.get("timeout", LlmEnricherConfig.timeout)),
         prompt_file=str(data.get("prompt_file", LlmEnricherConfig.prompt_file)),
+        auto_start=bool(data.get("auto_start", LlmEnricherConfig.auto_start)),
+        auto_pull_model=bool(data.get("auto_pull_model", LlmEnricherConfig.auto_pull_model)),
+        stop_after_run=bool(data.get("stop_after_run", LlmEnricherConfig.stop_after_run)),
     )
