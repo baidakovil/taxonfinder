@@ -81,14 +81,14 @@ def test_ambiguous_case_has_multiple_matches() -> None:
 def test_ambiguous_case_is_not_identified() -> None:
     output = _load_fixture("ambiguous_sentence_output.json")
 
-    assert all(item["identified"] == "no" for item in output)
+    assert all(item["identified"] is False for item in output)
 
 
 def test_ambiguous_case_has_candidate_names_and_reason() -> None:
     output = _load_fixture("ambiguous_sentence_output.json")
 
     for item in output:
-        if item["identified"] == "no":
+        if item["identified"] is False:
             assert "candidate_names" in item
             assert "reason" in item
             assert len(item["candidate_names"]) > 0

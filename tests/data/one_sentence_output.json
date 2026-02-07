@@ -1,7 +1,7 @@
 [
   {
     "source_text": "липа",
-    "identified": "yes",
+    "identified": true,
     "extraction_confidence": 1.0,
     "extraction_method": "gazetteer",
     "count": 1,

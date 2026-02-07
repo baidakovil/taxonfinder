@@ -98,7 +98,7 @@ flowchart TD
 | `method` | `ExtractionMethod` | Метод извлечения с наивысшим приоритетом в группе (газеттер > regex > LLM). Если один и тот же фрагмент найден и газеттером, и regex — берётся газеттер. |
 | `confidence` | `float` | Наивысшая confidence среди кандидатов группы. |
 | `occurrences` | `list[Occurrence]` | Все места в тексте, где встречен этот кандидат (может быть сотни). |
-| `gazetteer_taxon_ids` | `list[int]` | Объединение `gazetteer_taxon_ids` из всех кандидатов группы. |
+| `gazetteer_taxon_ids` | `list[int]` | Объединение `gazetteer_taxon_ids` из всех кандидатов группы. При группировке по лемме объединение выполняется только если множества `gazetteer_taxon_ids` пересекаются (или хотя бы одно пусто). Это предотвращает объединение омонимов, маппящихся на разные таксоны. |
 | `skip_resolution` | `bool` | `True`, если обращение к iNaturalist API **не требуется**: кандидат найден газеттером, и SQLite-база содержит все поля, необходимые для вывода (`taxon_id`, `taxon_name`, `taxon_rank`, `taxon_common_name`). Устанавливается при создании группы на основе проверки данных газеттера. |
 
 ---
@@ -117,7 +117,7 @@ flowchart TD
 |------|-----|----------|
 | `kingdom` | `str \| None` | Царство (напр. «Animalia», «Plantae»). |
 | `phylum` | `str \| None` | Тип/Отдел (напр. «Chordata», «Magnoliophyta»). |
-| `class_` | `str \| None` | Класс (напр. «Aves», «Mammalia»). Имя `class_`, т.к. `class` зарезервировано в Python. |
+| `class_` | `str \| None` | Класс (напр. «Aves», «Mammalia»). Имя `class_`, т.к. `class` зарезервировано в Python. При сериализации в JSON поле сериализуется как `"class"` (без подчёркивания). Сериализатор (`to_dict()` или аналог) должен выполнять маппинг `class_` → `class`. |
 | `order` | `str \| None` | Отряд/Порядок (напр. «Passeriformes», «Rosales»). |
 | `family` | `str \| None` | Семейство (напр. «Anatidae», «Rosaceae»). |
 | `genus` | `str \| None` | Род (напр. «Tilia», «Quercus»). |
@@ -194,14 +194,14 @@ LLM-обогатитель может использовать другую мо
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `source_text` | `str` | Каноническая форма названия таксона — `source_text` из первого вхождения. Используется как основное представление в выводе. |
-| `identified` | `str` | `"yes"` или `"no"`. Строковый формат, готовый для JSON-вывода. |
+| `identified` | `bool` | `true` или `false`. Boolean в Python и в JSON. |
 | `extraction_confidence` | `float` | Confidence из `CandidateGroup` (наивысший в группе). |
 | `extraction_method` | `ExtractionMethod` | Метод извлечения из `CandidateGroup` (наивысший приоритет). |
 | `occurrences` | `list[Occurrence]` | Все места в тексте, где встречен этот таксон. `count` вычисляется как `len(occurrences)`. |
 | `matches` | `list[TaxonMatch]` | Результаты из iNaturalist/газеттера (до 5). Формат элементов совпадает с JSON-схемой вывода. |
 | `llm_response` | `LlmEnrichmentResponse \| None` | Ответ LLM-обогатителя. `None`, если LLM не использовался. |
-| `candidate_names` | `list[str]` | Все опробованные варианты названий. Пустой список при `identified="yes"`. Всегда присутствует в JSON-выводе (без conditional requirements — это упрощает схему и парсинг). |
-| `reason` | `str` | Диагностическое сообщение. Пустая строка при `identified="yes"`. Всегда присутствует в JSON-выводе. |
+| `candidate_names` | `list[str]` | Все опробованные варианты названий. Пустой список при `identified=true`. Всегда присутствует в JSON-выводе (без conditional requirements — это упрощает схему и парсинг). |
+| `reason` | `str` | Диагностическое сообщение. Пустая строка при `identified=true`. Всегда присутствует в JSON-выводе. |
 
 #### Значения reason
 
@@ -209,7 +209,7 @@ LLM-обогатитель может использовать другую мо
 
 | Значение | Когда устанавливается |
 |----------|----------------------|
-| `""` (пустая строка) | `identified="yes"` — таксон успешно определён. |
+| `""` (пустая строка) | `identified=true` — таксон успешно определён. |
 | `"No matches in iNaturalist"` | API не нашёл ни одного таксона по запросу. |
 | `"Common name not matched"` | Matches найдены, но ни один `taxon_matched_name` не совпал с source_text (по normalized/lemmatized формам). |
 | `"Multiple candidate taxa found"` | Несколько возможных matches с близким score, невозможно выбрать однозначно. |
@@ -278,8 +278,8 @@ CLI использует для обновления прогресс-бара.
 |------|-----|----------|
 | `total_candidates` | `int` | Общее число кандидатов из всех экстракторов (до merge). |
 | `unique_candidates` | `int` | Число уникальных кандидатов после дедупликации. |
-| `identified_count` | `int` | Сколько таксонов были успешно определены (`identified="yes"`). |
-| `unidentified_count` | `int` | Сколько таксонов остались неопределёнными (`identified="no"`). |
+| `identified_count` | `int` | Сколько таксонов были успешно определены (`identified=true`). |
+| `unidentified_count` | `int` | Сколько таксонов остались неопределёнными (`identified=false`). |
 | `skipped_resolution` | `int` | Сколько кандидатов пропустили Фазу 3 (полные данные из газеттера). |
 | `api_calls` | `int` | Фактическое число запросов к iNaturalist API (включая Фазу 4). |
 | `cache_hits` | `int` | Сколько запросов были обслужены из кэша (не обращались к API). |
@@ -577,7 +577,7 @@ classDiagram
 
     class TaxonResult {
         source_text : str
-        identified : str
+        identified : bool
         extraction_confidence : float
         extraction_method : ExtractionMethod
         occurrences : list~Occurrence~

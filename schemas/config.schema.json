@@ -39,6 +39,17 @@
       "default": 2.0,
       "description": "Maximum input file size in megabytes. Files exceeding this limit are rejected before processing."
     },
+    "degraded_mode": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, missing gazetteer is a WARNING (pipeline continues with available extractors). When false (default), missing gazetteer is a fatal error."
+    },
+    "user_agent": {
+      "type": "string",
+      "minLength": 1,
+      "default": "TaxonFinder/0.1.0",
+      "description": "User-Agent header for all outgoing HTTP requests (iNaturalist API, LLM providers). Required by iNaturalist API guidelines."
+    },
     "inaturalist": {
       "type": "object",
       "additionalProperties": false,

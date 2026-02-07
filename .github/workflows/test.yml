@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Validate test fixtures against schemas
+        run: |
+          python -c "
+          import json, jsonschema, pathlib
+
+          schemas_dir = pathlib.Path('schemas')
+          tests_dir = pathlib.Path('tests/data')
+
+          dedup_schema = json.loads((schemas_dir / 'output-deduplicated.schema.json').read_text())
+
+          for fixture in tests_dir.glob('*_output.json'):
+              data = json.loads(fixture.read_text())
+              # Fixtures are raw result arrays; wrap in envelope for validation
+              envelope = {'version': '1.0', 'results': data}
+              jsonschema.validate(envelope, dedup_schema)
+              print(f'  OK: {fixture.name}')
+          "
+
+      - name: Run pytest
+        run: pytest -ra

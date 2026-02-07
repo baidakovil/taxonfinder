@@ -2,90 +2,102 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/taxonfinder/output-deduplicated.schema.json",
   "title": "TaxonFinder Output (Deduplicated)",
-  "description": "Default output format: one entry per unique taxon with occurrence list.",
-  "type": "array",
-  "items": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "source_text",
-      "identified",
-      "extraction_confidence",
-      "extraction_method",
-      "count",
-      "occurrences",
-      "matches",
-      "candidate_names",
-      "reason"
-    ],
-    "properties": {
-      "source_text": {
-        "type": "string",
-        "minLength": 1,
-        "description": "Canonical form of the taxon name (from first occurrence)."
-      },
-      "identified": {
-        "type": "string",
-        "enum": ["yes", "no"]
-      },
-      "extraction_confidence": {
-        "type": "number",
-        "minimum": 0,
-        "maximum": 1,
-        "description": "Confidence that the extracted fragment is a taxon name. See docs/processing.md for the confidence model."
-      },
-      "extraction_method": {
-        "type": "string",
-        "enum": ["gazetteer", "latin_regex", "llm"],
-        "description": "Method used to extract the candidate taxon name."
-      },
-      "count": {
-        "type": "integer",
-        "minimum": 1,
-        "description": "Number of occurrences of this taxon in the text."
-      },
-      "occurrences": {
-        "type": "array",
-        "minItems": 1,
-        "description": "All occurrences of this taxon in the text.",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["line_number", "source_text", "source_context"],
-          "properties": {
-            "line_number": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "1-based line number in the input file."
-            },
-            "source_text": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Original text as found in the source (no normalization)."
-            },
-            "source_context": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Sentence containing the occurrence."
+  "description": "Default output format: one entry per unique taxon with occurrence list, wrapped in a versioned envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "results"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Output format version. Incremented on breaking changes."
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_text",
+          "identified",
+          "extraction_confidence",
+          "extraction_method",
+          "count",
+          "occurrences",
+          "matches",
+          "candidate_names",
+          "reason"
+        ],
+        "properties": {
+          "source_text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical form of the taxon name (from first occurrence)."
+          },
+          "identified": {
+            "type": "boolean",
+            "description": "Whether the taxon was successfully identified."
+          },
+          "extraction_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence that the extracted fragment is a taxon name. See docs/processing.md for the confidence model."
+          },
+          "extraction_method": {
+            "type": "string",
+            "enum": ["gazetteer", "latin_regex", "llm"],
+            "description": "Method used to extract the candidate taxon name."
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of occurrences of this taxon in the text."
+          },
+          "occurrences": {
+            "type": "array",
+            "minItems": 1,
+            "description": "All occurrences of this taxon in the text.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["line_number", "source_text", "source_context"],
+              "properties": {
+                "line_number": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "1-based line number in the input file."
+                },
+                "source_text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Original text as found in the source (no normalization)."
+                },
+                "source_context": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Sentence containing the occurrence."
+                }
+              }
             }
+          },
+          "matches": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "iNaturalist search results, sorted by score descending.",
+            "items": { "$ref": "#/$defs/match" }
+          },
+          "llm_response": { "$ref": "#/$defs/llm_response" },
+          "candidate_names": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Candidate names tried during resolution (empty when identified=true)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Diagnostic message explaining resolution result (empty when identified=true)."
           }
         }
-      },
-      "matches": {
-        "type": "array",
-        "maxItems": 5,
-        "description": "iNaturalist search results, sorted by score descending.",
-        "items": { "$ref": "#/$defs/match" }
-      },
-      "llm_response": { "$ref": "#/$defs/llm_response" },
-      "candidate_names": {
-        "type": "array",
-        "items": { "type": "string", "minLength": 1 },
-        "description": "Candidate names tried during resolution (empty when identified=yes)."
-      },
-      "reason": {
-        "type": "string",
-        "description": "Diagnostic message explaining resolution result (empty when identified=yes)."
       }
     }
   },
@@ -93,7 +105,8 @@
     "taxonomy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Taxonomic hierarchy of the taxon.",
+      "minProperties": 1,
+      "description": "Taxonomic hierarchy of the taxon. At least one level must be present. Verify minProperties constraint during development.",
       "properties": {
         "kingdom": {
           "type": ["string", "null"],
@@ -105,7 +118,7 @@
         },
         "class": {
           "type": ["string", "null"],
-          "description": "Class (e.g. Aves, Mammalia)."
+          "description": "Class (e.g. Aves, Mammalia). Python dataclass field: class_ (reserved word); serialized as 'class' in JSON."
         },
         "order": {
           "type": ["string", "null"],

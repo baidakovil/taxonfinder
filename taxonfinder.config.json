@@ -4,6 +4,8 @@
   "gazetteer_path": "data/gazetteer.db",
   "spacy_model": "ru_core_news_md",
   "max_file_size_mb": 2.0,
+  "degraded_mode": false,
+  "user_agent": "TaxonFinder/0.1.0",
   "inaturalist": {
     "base_url": "https://api.inaturalist.org",
     "timeout": 30,

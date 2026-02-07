@@ -1,7 +1,7 @@
 [
   {
     "source_text": "дикая коза",
-    "identified": "no",
+    "identified": false,
     "extraction_confidence": 0.6,
     "extraction_method": "llm",
     "count": 1,

@@ -13,6 +13,7 @@ dependencies = [
     "click",
     "structlog",
     "python-dotenv",
+    "charset-normalizer",
 ]
 
 [project.optional-dependencies]

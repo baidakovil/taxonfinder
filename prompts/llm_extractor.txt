@@ -1,5 +1,7 @@
 You are a taxonomy assistant. You will receive a fragment of text (a paragraph or a page).
 
+The text language is: {{locale}}
+
 Your task: find ALL mentions of living organisms in the text — plants, animals, fungi, lichens, bacteria, etc.
 
 Include:
