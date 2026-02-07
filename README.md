@@ -1,7 +1,7 @@
 # TaxonFinder
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/baidakov/taxonfinder/test.yml?branch=main&label=tests)](https://github.com/baidakov/taxonfinder/actions/workflows/test.yml)
-[![Lint](https://img.shields.io/github/actions/workflow/status/baidakov/taxonfinder/lint.yml?branch=main&label=lint)](https://github.com/baidakov/taxonfinder/actions/workflows/lint.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/baidakovil/taxonfinder/test.yml?branch=main&label=tests)](https://github.com/baidakovil/taxonfinder/actions/workflows/test.yml)
+[![Lint](https://img.shields.io/github/actions/workflow/status/baidakovil/taxonfinder/lint.yml?branch=main&label=lint)](https://github.com/baidakovil/taxonfinder/actions/workflows/lint.yml)
 
 TaxonFinder extracts organism names (plants, animals, fungi, etc.) from Russian texts and returns JSON with Latin names, confidence, and iNaturalist links.
 
