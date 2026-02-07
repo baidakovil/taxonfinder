@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-        - name: Validate test fixtures against schemas
+      - name: Validate test fixtures against schemas
         run: |
           python - <<'PY'
           import json
