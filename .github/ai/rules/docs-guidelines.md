@@ -1,5 +1,5 @@
 ---
-description: Documentation style for Markdown files
+description: Documentation style for Markdown files (migrated from .cursor)
 globs: "**/*.md, **/*.mdc"
 alwaysApply: false
 ---

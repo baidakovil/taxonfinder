@@ -2,7 +2,8 @@
 
 Спецификация входных/выходных форматов, конфигурации и CLI-интерфейса.
 Архитектура и пайплайн описаны в [projectdescription.md](../projectdescription.md),
-алгоритмы — в [docs/processing.md](processing.md).
+алгоритмы — в [docs/processing.md](processing.md),
+модели данных — в [docs/models.md](models.md).
 
 ## Входные данные
 
@@ -63,19 +64,22 @@ class TextLoader(Protocol):
   - `source_text`: string (как в оригинале).
   - `source_context`: string (предложение).
 - `matches`: array (до 5) — результаты из iNaturalist.
+- `candidate_names`: array[string] — опробованные варианты названий (пустой при identified="yes").
+- `reason`: string — диагностическое сообщение (пустая строка при identified="yes").
 
 Опциональные поля:
 - `llm_response`: object | null — ответ LLM-обогатителя.
 
-Обязательные при `identified: "no"`:
-- `candidate_names`: array[string].
-- `reason`: string.
+Поля `candidate_names` и `reason` всегда присутствуют (без conditional requirements) —
+это упрощает схему и парсинг.
 
 Поля каждого элемента `matches`:
 - `taxon_id`: integer — id таксона в iNaturalist.
 - `taxon_name`: string — научное (латинское) название.
 - `taxon_rank`: string — таксономический ранг.
-- `taxon_common_name`: string | null — предпочитаемое общее имя.
+- `taxonomy`: object — таксономическая иерархия (kingdom, phylum, class, order, family, genus, species).
+- `taxon_common_name_en`: string | null — английское народное название.
+- `taxon_common_name_loc`: string | null — народное название для locale из конфига.
 - `taxon_matched_name`: string — имя, по которому найден таксон.
 - `taxon_url`: string — `https://www.inaturalist.org/taxa/{taxon_id}`.
 
@@ -111,11 +115,23 @@ class TextLoader(Protocol):
         "taxon_id": 54586,
         "taxon_name": "Tilia",
         "taxon_rank": "genus",
-        "taxon_common_name": "Linden",
+        "taxonomy": {
+          "kingdom": "Plantae",
+          "phylum": "Tracheophyta",
+          "class": "Magnoliopsida",
+          "order": "Malvales",
+          "family": "Malvaceae",
+          "genus": "Tilia",
+          "species": null
+        },
+        "taxon_common_name_en": "Lindens",
+        "taxon_common_name_loc": "Липа",
         "taxon_matched_name": "липа",
         "taxon_url": "https://www.inaturalist.org/taxa/54586"
       }
     ],
+    "candidate_names": [],
+    "reason": "",
     "llm_response": null
   }
 ]
@@ -133,13 +149,11 @@ class TextLoader(Protocol):
 - `extraction_confidence`: number (0.0–1.0).
 - `extraction_method`: `"gazetteer"` | `"latin_regex"` | `"llm"`.
 - `matches`: array (до 5).
+- `candidate_names`: array[string] — опробованные варианты названий (пустой при identified="yes").
+- `reason`: string — диагностическое сообщение (пустая строка при identified="yes").
 
 Опциональные поля:
 - `llm_response`: object | null.
-
-Обязательные при `identified: "no"`:
-- `candidate_names`: array[string].
-- `reason`: string.
 
 Пример:
 
@@ -157,11 +171,23 @@ class TextLoader(Protocol):
         "taxon_id": 54586,
         "taxon_name": "Tilia",
         "taxon_rank": "genus",
-        "taxon_common_name": "Linden",
+        "taxonomy": {
+          "kingdom": "Plantae",
+          "phylum": "Tracheophyta",
+          "class": "Magnoliopsida",
+          "order": "Malvales",
+          "family": "Malvaceae",
+          "genus": "Tilia",
+          "species": null
+        },
+        "taxon_common_name_en": "Lindens",
+        "taxon_common_name_loc": "Липа",
         "taxon_matched_name": "липа",
         "taxon_url": "https://www.inaturalist.org/taxa/54586"
       }
     ],
+    "candidate_names": [],
+    "reason": "",
     "llm_response": null
   }
 ]

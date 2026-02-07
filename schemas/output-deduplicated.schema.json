@@ -14,7 +14,9 @@
       "extraction_method",
       "count",
       "occurrences",
-      "matches"
+      "matches",
+      "candidate_names",
+      "reason"
     ],
     "properties": {
       "source_text": {
@@ -79,22 +81,50 @@
       "candidate_names": {
         "type": "array",
         "items": { "type": "string", "minLength": 1 },
-        "description": "Candidate names from LLM and gazetteer (required when identified=no)."
+        "description": "Candidate names tried during resolution (empty when identified=yes)."
       },
       "reason": {
         "type": "string",
-        "description": "Why the taxon could not be confirmed (required when identified=no)."
+        "description": "Diagnostic message explaining resolution result (empty when identified=yes)."
       }
-    },
-    "if": {
-      "properties": { "identified": { "const": "no" } },
-      "required": ["identified"]
-    },
-    "then": {
-      "required": ["candidate_names", "reason"]
     }
   },
   "$defs": {
+    "taxonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Taxonomic hierarchy of the taxon.",
+      "properties": {
+        "kingdom": {
+          "type": ["string", "null"],
+          "description": "Kingdom (e.g. Animalia, Plantae)."
+        },
+        "phylum": {
+          "type": ["string", "null"],
+          "description": "Phylum/Division (e.g. Chordata, Tracheophyta)."
+        },
+        "class": {
+          "type": ["string", "null"],
+          "description": "Class (e.g. Aves, Mammalia)."
+        },
+        "order": {
+          "type": ["string", "null"],
+          "description": "Order (e.g. Passeriformes, Rosales)."
+        },
+        "family": {
+          "type": ["string", "null"],
+          "description": "Family (e.g. Anatidae, Rosaceae)."
+        },
+        "genus": {
+          "type": ["string", "null"],
+          "description": "Genus (e.g. Tilia, Quercus)."
+        },
+        "species": {
+          "type": ["string", "null"],
+          "description": "Species (matches taxon_name for species-level taxa)."
+        }
+      }
+    },
     "match": {
       "type": "object",
       "additionalProperties": false,
@@ -102,7 +132,9 @@
         "taxon_id",
         "taxon_name",
         "taxon_rank",
-        "taxon_common_name",
+        "taxonomy",
+        "taxon_common_name_en",
+        "taxon_common_name_loc",
         "taxon_matched_name",
         "taxon_url"
       ],
@@ -122,9 +154,16 @@
           "minLength": 1,
           "description": "Taxonomic rank (e.g. species, genus)."
         },
-        "taxon_common_name": {
+        "taxonomy": {
+          "$ref": "#/$defs/taxonomy"
+        },
+        "taxon_common_name_en": {
           "type": ["string", "null"],
-          "description": "Preferred common name (if available)."
+          "description": "English common name (always loaded for portability)."
+        },
+        "taxon_common_name_loc": {
+          "type": ["string", "null"],
+          "description": "Common name for the configured locale."
         },
         "taxon_matched_name": {
           "type": "string",
@@ -142,15 +181,22 @@
       "type": ["object", "null"],
       "description": "LLM enricher response (if LLM was consulted).",
       "additionalProperties": false,
-      "required": ["common_names_ru", "common_names_en"],
+      "required": ["common_names_loc", "common_names_en", "latin_names"],
       "properties": {
-        "common_names_ru": {
+        "common_names_loc": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Common names in the text language (locale from config)."
         },
         "common_names_en": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 }
+          "items": { "type": "string", "minLength": 1 },
+          "description": "English common names suggested by LLM."
+        },
+        "latin_names": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Latin (scientific) names suggested by LLM."
         }
       }
     }
