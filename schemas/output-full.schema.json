@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/taxonfinder/output-full.schema.json",
+  "title": "TaxonFinder Output (Full, --all-occurrences)",
+  "description": "Full output format: one entry per occurrence. Used with --all-occurrences flag.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "line_number",
+      "source_text",
+      "source_context",
+      "identified",
+      "extraction_confidence",
+      "extraction_method",
+      "matches"
+    ],
+    "properties": {
+      "line_number": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "1-based line number in the input file."
+      },
+      "source_text": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Original text as found in the source (no normalization)."
+      },
+      "source_context": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Sentence containing the occurrence."
+      },
+      "identified": {
+        "type": "string",
+        "enum": ["yes", "no"]
+      },
+      "extraction_confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Confidence that the extracted fragment is a taxon name. See docs/processing.md for the confidence model."
+      },
+      "extraction_method": {
+        "type": "string",
+        "enum": ["gazetteer", "latin_regex", "llm"],
+        "description": "Method used to extract the candidate taxon name."
+      },
+      "matches": {
+        "type": "array",
+        "maxItems": 5,
+        "description": "iNaturalist search results, sorted by score descending.",
+        "items": { "$ref": "#/$defs/match" }
+      },
+      "llm_response": { "$ref": "#/$defs/llm_response" },
+      "candidate_names": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "description": "Candidate names from LLM and gazetteer (required when identified=no)."
+      },
+      "reason": {
+        "type": "string",
+        "description": "Why the taxon could not be confirmed (required when identified=no)."
+      }
+    },
+    "if": {
+      "properties": { "identified": { "const": "no" } },
+      "required": ["identified"]
+    },
+    "then": {
+      "required": ["candidate_names", "reason"]
+    }
+  },
+  "$defs": {
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "taxon_id",
+        "taxon_name",
+        "taxon_rank",
+        "taxon_common_name",
+        "taxon_matched_name",
+        "taxon_url"
+      ],
+      "properties": {
+        "taxon_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "iNaturalist taxon ID."
+        },
+        "taxon_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Scientific (Latin) name."
+        },
+        "taxon_rank": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Taxonomic rank (e.g. species, genus)."
+        },
+        "taxon_common_name": {
+          "type": ["string", "null"],
+          "description": "Preferred common name (if available)."
+        },
+        "taxon_matched_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name by which the taxon was matched."
+        },
+        "taxon_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the taxon page on iNaturalist."
+        }
+      }
+    },
+    "llm_response": {
+      "type": ["object", "null"],
+      "description": "LLM enricher response (if LLM was consulted).",
+      "additionalProperties": false,
+      "required": ["common_names_ru", "common_names_en"],
+      "properties": {
+        "common_names_ru": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "common_names_en": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

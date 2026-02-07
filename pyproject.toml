@@ -7,7 +7,6 @@ license = {text = "MIT"}
 dependencies = [
     "spacy>=3.7",
     "pymorphy3",
-    "pyinaturalist",
     "httpx",
     "jsonschema",
     "click",

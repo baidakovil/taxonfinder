@@ -69,7 +69,21 @@
           "type": "string",
           "enum": ["paragraph", "page"],
           "default": "paragraph",
-          "description": "Strategy for splitting text into chunks: 'paragraph' (~150-300 words) or 'page' (~350 words)."
+          "description": "Strategy for splitting text into chunks."
+        },
+        "min_chunk_words": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 500,
+          "default": 50,
+          "description": "Minimum chunk size in words. Smaller chunks are merged with adjacent ones."
+        },
+        "max_chunk_words": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 2000,
+          "default": 500,
+          "description": "Maximum chunk size in words. Larger chunks are split by sentence boundaries."
         }
       }
     },

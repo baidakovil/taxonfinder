@@ -9,7 +9,9 @@
     "url": "http://localhost:11434",
     "timeout": 60,
     "prompt_file": "prompts/llm_extractor.txt",
-    "chunk_strategy": "paragraph"
+    "chunk_strategy": "paragraph",
+    "min_chunk_words": 50,
+    "max_chunk_words": 500
   },
   "llm_enricher": {
     "enabled": true,
