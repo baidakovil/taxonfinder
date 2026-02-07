@@ -19,7 +19,7 @@
 | `taxonfinder/__init__.py` | Пустой, делает директорию пакетом |
 | `taxonfinder/models.py` | Dataclasses: `Candidate`, `Occurrence`, `CandidateGroup`, `TaxonomyInfo`, `TaxonMatch`, `LlmEnrichmentResponse`, `ResolvedCandidate`, `TaxonResult` + `ExtractionMethod` (Literal) |
 | `taxonfinder/events.py` | Dataclasses: `PhaseStarted`, `PhaseProgress`, `ResultReady`, `PipelineFinished`, `PipelineSummary`, `PipelineEstimate` + type alias `PipelineEvent` |
-| `taxonfinder/config.py` | `Config` dataclass, `load_config(path) -> Config` — загрузка JSON, валидация через `jsonschema` по `schemas/config.schema.json`, `dotenv.load_dotenv()`, чтение API-ключей из `os.environ` |
+| `taxonfinder/config.py` | `Config` dataclass, `load_config(path) -> Config` — загрузка JSON, валидация через `jsonschema` по `schemas/config.schema.json`, `dotenv.load_dotenv()` для загрузки `.env` в `os.environ`. API-ключи читаются LLM-клиентами из `os.environ` при инициализации. |
 | `taxonfinder/normalizer.py` | `normalize(text) -> str` (lowercase + ё→е), `lemmatize(text, morph) -> str` (pymorphy3 по токенам), `search_variants(text, morph) -> list[str]` — набор вариантов для поиска |
 | `taxonfinder/logging.py` | `setup_logging(json_mode: bool)` — конфигурация structlog (human-readable / JSON) |
 | `taxonfinder/rate_limiter.py` | `TokenBucketRateLimiter(rate, burst)` — thread-safe token bucket |

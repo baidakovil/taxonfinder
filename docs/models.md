@@ -137,6 +137,8 @@ flowchart TD
 | `taxon_common_name_en` | `str \| None` | Предпочитаемое английское народное название. Всегда загружается из iNaturalist для универсальности и портируемости. `None`, если недоступно. |
 | `taxon_common_name_loc` | `str \| None` | Предпочитаемое народное название для locale из конфигурации (например, «Липа» для locale=ru). `None`, если iNaturalist не имеет common name для этого locale. |
 | `taxon_matched_name` | `str` | Название, по которому был найден этот таксон. Может отличаться от `source_text` — например, если поиск шёл по лемме «липа», а source_text было «лип». |
+| `taxon_url` | `str` | URL таксона на iNaturalist.org (например, `https://www.inaturalist.org/taxa/54586`). Формируется из `taxon_id` или извлекается из поля `uri` ответа API. |
+| `taxon_names` | `list[str]` | Список всех альтернативных названий таксона из iNaturalist (поле `names` в ответе API). Используется внутренне в `DefaultIdentificationResolver` для улучшения точности сопоставления имён. Не сериализуется в JSON-вывод. |
 | `score` | `float` | Релевантность. Для API-результатов — `score` из ответа iNaturalist. Для газеттерных результатов — синтетический score (1.0 для `is_preferred`, 0.5 для остальных). Используется для сортировки matches и доступен при отладке/API-режиме. |
 
 ### LlmEnrichmentResponse

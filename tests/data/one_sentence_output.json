@@ -1,40 +1,43 @@
-[
-  {
-    "source_text": "липа",
-    "identified": true,
-    "extraction_confidence": 1.0,
-    "extraction_method": "gazetteer",
-    "count": 1,
-    "occurrences": [
-      {
-        "line_number": 1,
-        "source_text": "липа",
-        "source_context": "На перевале росла огромная липа, растущая, словно великан, здесь уже более двух веков."
-      }
-    ],
-    "matches": [
-      {
-        "taxon_id": 54586,
-        "taxon_name": "Tilia",
-        "taxon_rank": "genus",
-        "taxonomy": {
-          "kingdom": "Plantae",
-          "phylum": "Tracheophyta",
-          "class": "Magnoliopsida",
-          "order": "Malvales",
-          "family": "Malvaceae",
-          "genus": "Tilia",
-          "species": null
-        },
-        "taxon_common_name_en": "Lindens",
-        "taxon_common_name_loc": "Липа",
-        "taxon_matched_name": "липа",
-        "taxon_url": "https://www.inaturalist.org/taxa/54586",
-        "score": 1.0
-      }
-    ],
-    "candidate_names": [],
-    "reason": "",
-    "llm_response": null
-  }
-]
+{
+  "version": "1.0",
+  "results": [
+    {
+      "source_text": "липа",
+      "identified": true,
+      "extraction_confidence": 1.0,
+      "extraction_method": "gazetteer",
+      "count": 1,
+      "occurrences": [
+        {
+          "line_number": 1,
+          "source_text": "липа",
+          "source_context": "На перевале росла огромная липа, растущая, словно великан, здесь уже более двух веков."
+        }
+      ],
+      "matches": [
+        {
+          "taxon_id": 54586,
+          "taxon_name": "Tilia",
+          "taxon_rank": "genus",
+          "taxonomy": {
+            "kingdom": "Plantae",
+            "phylum": "Tracheophyta",
+            "class": "Magnoliopsida",
+            "order": "Malvales",
+            "family": "Malvaceae",
+            "genus": "Tilia",
+            "species": null
+          },
+          "taxon_common_name_en": "Lindens",
+          "taxon_common_name_loc": "Липа",
+          "taxon_matched_name": "липа",
+          "taxon_url": "https://www.inaturalist.org/taxa/54586",
+          "score": 1.0
+        }
+      ],
+      "candidate_names": [],
+      "reason": "",
+      "llm_response": null
+    }
+  ]
+}

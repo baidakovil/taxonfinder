@@ -3,15 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-
 DATA_DIR = Path(__file__).parent / "data"
 
 
 def _load_fixture(name: str) -> list[dict]:
     """Load a JSON fixture from the tests/data directory."""
-    return json.loads((DATA_DIR / name).read_text(encoding="utf-8"))
+    payload = json.loads((DATA_DIR / name).read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        return payload.get("results", [])
+    return payload
 
 
 # --- one_sentence: gazetteer exact match ---

@@ -337,8 +337,9 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-`config.py` при загрузке конфигурации вызывает `dotenv.load_dotenv()` и читает
-ключи из `os.environ`. Провайдер `ollama` не требует ключа.
+`config.py` при загрузке конфигурации вызывает `dotenv.load_dotenv()`, что загружает
+переменные окружения из `.env` файла в `os.environ`. LLM-клиенты (OpenAI, Anthropic)
+читают API-ключи из `os.environ` при инициализации. Провайдер `ollama` не требует ключа.
 
 ## Подробная документация
 
