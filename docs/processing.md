@@ -82,6 +82,63 @@ CREATE INDEX idx_cn_taxon ON common_names(taxon_id);
 Газеттер строится отдельной CLI-командой (`taxonfinder build-gazetteer`) и не обновляется
 автоматически. Пересборка выполняется вручную при необходимости.
 
+### Построение газеттера (builder)
+
+Builder — отдельная подсистема для заполнения SQLite-базы газеттера из внешних
+источников. Реализуется в `taxonfinder/gazetteer/builder.py`.
+
+#### Сценарий 1: CSV-контрольный список (v0.1)
+
+**Вход:** CSV-файл контрольного списка iNaturalist (checklist export).
+Столбцы: `taxon_name`, `description`, `occurrence_status`, `establishment_means`,
+`adding_user_login`, `first_observation`, `last_observation`, `url`,
+`created_at`, `updated_at`, `taxon_common_name`.
+
+Пример файла: `data/control_list/7502-Russia-Check-List.csv` (~42 000 таксонов).
+
+**Алгоритм:**
+1. Парсинг CSV: извлечение столбца `taxon_name` (научное название).
+2. Для каждого `taxon_name` —запрос к iNaturalist API:
+   - `/v1/taxa?q={taxon_name}&is_active=true` → получение `taxon_id`, `rank`,
+     `ancestry`, `names` (все common names).
+3. Из ответа извлекаются common names для настроенных локалей (`ru`, `en`).
+4. Данные записываются в SQLite-базу (таблицы `taxa`, `common_names`).
+   Нормализация и лемматизация common names выполняется при записи.
+5. Записи тегируются (таблица `taxon_tags` или поле `tag` в `taxa`),
+   чтобы различать источники. Для данного файла тег: `"russia"`.
+
+**CLI:**
+```
+taxonfinder build-gazetteer \
+  --source csv \
+  --file data/control_list/7502-Russia-Check-List.csv \
+  --tag russia \
+  --locales ru,en
+```
+
+**Оценка:**
+- ~42 000 таксонов × 1 API-запрос/сек = ~12 часов.
+- Rate limiter используется совместно с основным пайплайном.
+- Прогресс сохраняется: при перезапуске builder продолжает
+  с последнего необработанного таксона (по наличию записи в `taxa`).
+- Ошибки отдельных запросов логируются и пропускаются.
+
+**Схема SQLite — расширение для тегов:**
+
+```sql
+CREATE TABLE taxon_tags (
+    taxon_id INTEGER NOT NULL REFERENCES taxa(taxon_id),
+    tag TEXT NOT NULL,
+    PRIMARY KEY (taxon_id, tag)
+);
+
+CREATE INDEX idx_tags_tag ON taxon_tags(tag);
+```
+
+Другие сценарии построения (по `place_id`, по iconic taxa, по произвольному
+списку видов) будут разрабатываться позже. Архитектура builder допускает
+добавление новых стратегий без изменения runtime газеттера.
+
 ## Regex-детектор латинских биномиалов
 
 Базовый паттерн: `[A-Z][a-z]+ [a-z]+( [a-z]+)?` — ловит латинские биномиалы, но
@@ -201,13 +258,28 @@ LLM-обогатитель может использовать другую мо
 ### Обработка ошибок LLM
 
 Правила одинаковы для обеих ролей:
-1. Невалидный JSON (markdown-обёртка, trailing comma, лишний текст) — попытка очистки
+
+1. **Structured output (предпочтительно):** Если провайдер поддерживает structured
+   output (OpenAI `response_format: json_schema`, Anthropic tool use, Ollama
+   `format: "json"`), `LlmClient` передаёт JSON-схему ожидаемого ответа
+   провайдеру. Это **устраняет** класс проблем с невалидным JSON.
+2. **Fallback (для провайдеров без structured output):** Невалидный JSON
+   (markdown-обёртка, trailing comma, лишний текст) — попытка очистки
    и парсинга (strip markdown fences, fix trailing commas).
-2. При неудаче — повтор запроса (до 2 раз).
-3. При стабильном невалидном ответе — WARNING в лог:
+3. При неудаче — повтор запроса (до 2 раз).
+4. При стабильном невалидном ответе — WARNING в лог:
    - LLM-экстрактор: чанк пропускается (кандидаты из него не добавляются).
    - LLM-обогатитель: кандидат получает `identified: "no"`,
      `reason: "LLM returned invalid response"`.
+
+### Шаблонизация промптов
+
+Промпт-файлы содержат плейсхолдеры в формате `{{locale}}`. Перед отправкой
+в LLM плейсхолдеры подставляются из конфигурации:
+- `{{locale}}` → значение поля `locale` из `Config` (например, `ru`, `en`).
+
+Это критично для LLM-обогатителя: при `locale=en` промпт запрашивает
+английские названия в `common_names_loc`, при `locale=ru` — русские.
 
 ## Нормализация текста
 
@@ -229,6 +301,11 @@ LLM-обогатитель может использовать другую мо
 - лемматизированная форма с заменой ё→е.
 
 ## Модель extraction_confidence
+
+> **Placeholder:** Текущая модель extraction_confidence — статическая и грубая.
+> Фиксированные значения не учитывают quality of match из iNaturalist API,
+> контекст (заголовок vs. текст), частоту слова в языке и другие сигналы.
+> Модель будет доработана на основе golden dataset.
 
 Значение `extraction_confidence` зависит от метода извлечения и **количества таксонов**,
 на которые маппится совпавшее название в газеттере (фактор неоднозначности).
@@ -314,3 +391,97 @@ PRAGMA user_version = 1;
 При запуске приложение проверяет `user_version` и завершается с понятным сообщением
 об ошибке при несовместимой версии схемы. При обновлении схемы базы данных
 версия инкрементируется.
+
+## Промежуточное сохранение (Checkpoint)
+
+Обработка книги — длительная операция (15–30 минут). Потеря результатов
+при сбое на 80% прогресса неприемлема.
+
+**Стратегия:** После завершения дорогостоящих фаз (Фаза 3 — resolution,
+Фаза 4 — enrichment) состояние сохраняется на диск в JSON-файл.
+При перезапуске пайплайн обнаруживает checkpoint и продолжает с сохранённой точки.
+
+**Что сохраняется:**
+- После Фазы 3: `list[CandidateGroup]` + `list[ResolvedCandidate]`
+  (все разрешённые и неразрешённые кандидаты).
+- После Фазы 4: обновлённый `list[ResolvedCandidate]` с LLM-обогащением.
+
+**Идентификация checkpoint:** Имя файла формируется из хэша
+`(sha256(input_text) + sha256(config_json))`. Это гарантирует, что checkpoint
+применяется только к тому же тексту с той же конфигурацией.
+
+**Расположение:** Директория `checkpoint/` (конфигурируется). Файлы удаляются
+после успешного завершения пайплайна.
+
+**Интерфейс:** См. `Checkpoint` в [models.md](models.md#checkpoint).
+
+## Модель spaCy
+
+По умолчанию используется `ru_core_news_md`. Модель конфигурируется
+через поле `spacy_model` в конфигурации. Влияние выбора модели:
+
+| Модель | Размер | Качество сегментации | Время загрузки |
+|--------|--------|---------------------|----------------|
+| `ru_core_news_sm` | ~15 MB | Базовое | ~1 сек |
+| `ru_core_news_md` | ~45 MB | Хорошее (рекомендуется) | ~2 сек |
+| `ru_core_news_lg` | ~500 MB | Лучшее | ~5 сек |
+
+Модель должна быть предварительно установлена:
+```
+python -m spacy download ru_core_news_md
+```
+
+## Rate Limiting
+
+HTTP-запросы к iNaturalist API (и потенциально к другим источникам)
+регулируются через `RateLimiter` — отдельный компонент, передаваемый
+в `TaxonSearcher` и другие HTTP-клиенты через DI.
+
+**Алгоритм: Token Bucket.**
+
+```
+rate = 1.0      # токенов/сек (устойчивая нагрузка)
+burst = 5       # максимальный burst
+tokens = burst  # начальное значение
+
+acquire():
+    refill tokens based on elapsed time since last refill
+    if tokens >= 1:
+        tokens -= 1
+        return immediately
+    else:
+        sleep until next token available
+```
+
+**Конфигурация:** Из секции `inaturalist` конфига (`rate_limit`, `burst_limit`).
+
+**Свойства:**
+- Thread-safe (для использования в web-адаптере с thread pool).
+- Stateless между запусками (каждый запуск начинает с полным bucket).
+- Один экземпляр разделяется между всеми компонентами, выполняющими
+  запросы к одному API.
+
+## Structured Logging
+
+Логирование реализуется через `structlog`:
+
+- **CLI-режим:** Human-readable formatter (цветной вывод с ISO-8601 временем).
+- **Production/Web-режим:** JSON formatter (каждая строка — JSON-объект
+  с полями `timestamp`, `level`, `event`, `phase`, `detail` и др.).
+
+Режим определяется автоматически: JSON при `LOG_FORMAT=json` в env
+или при запуске через web-адаптер; human-readable в остальных случаях.
+
+Логер создаётся в `taxonfinder/logging.py` и импортируется всеми модулями:
+
+```python
+import structlog
+logger = structlog.get_logger()
+
+# Использование:
+logger.info("resolution_complete", candidate="липа", identified=True)
+logger.warning("llm_invalid_json", chunk=15, attempt=2)
+```
+
+Файл лога: `logs/taxonfinder.log` (создаётся автоматически).
+Уровни: `DEBUG`, `INFO`, `WARNING`, `ERROR`.

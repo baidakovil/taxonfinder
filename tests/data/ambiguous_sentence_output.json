@@ -17,27 +17,51 @@
         "taxon_id": 12345,
         "taxon_name": "Capra aegagrus",
         "taxon_rank": "species",
-        "taxon_common_name": "Wild Goat",
+        "taxonomy": {
+          "kingdom": "Animalia",
+          "phylum": "Chordata",
+          "class": "Mammalia",
+          "order": "Artiodactyla",
+          "family": "Bovidae",
+          "genus": "Capra",
+          "species": "Capra aegagrus"
+        },
+        "taxon_common_name_en": "Wild Goat",
+        "taxon_common_name_loc": null,
         "taxon_matched_name": "дикая коза",
-        "taxon_url": "https://www.inaturalist.org/taxa/12345"
+        "taxon_url": "https://www.inaturalist.org/taxa/12345",
+        "score": 8.5
       },
       {
         "taxon_id": 67890,
         "taxon_name": "Capra hircus",
         "taxon_rank": "species",
-        "taxon_common_name": "Domestic Goat",
+        "taxonomy": {
+          "kingdom": "Animalia",
+          "phylum": "Chordata",
+          "class": "Mammalia",
+          "order": "Artiodactyla",
+          "family": "Bovidae",
+          "genus": "Capra",
+          "species": "Capra hircus"
+        },
+        "taxon_common_name_en": "Domestic Goat",
+        "taxon_common_name_loc": null,
         "taxon_matched_name": "коза",
-        "taxon_url": "https://www.inaturalist.org/taxa/67890"
+        "taxon_url": "https://www.inaturalist.org/taxa/67890",
+        "score": 7.2
       }
     ],
     "llm_response": {
-      "common_names_ru": [
-        "дикая коза",
+      "common_names_loc": [
         "коза"
       ],
       "common_names_en": [
         "Wild Goat",
         "Goat"
+      ],
+      "latin_names": [
+        "Capra aegagrus"
       ]
     },
     "candidate_names": [

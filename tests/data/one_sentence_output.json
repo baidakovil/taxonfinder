@@ -17,11 +17,24 @@
         "taxon_id": 54586,
         "taxon_name": "Tilia",
         "taxon_rank": "genus",
-        "taxon_common_name": "Linden",
+        "taxonomy": {
+          "kingdom": "Plantae",
+          "phylum": "Tracheophyta",
+          "class": "Magnoliopsida",
+          "order": "Malvales",
+          "family": "Malvaceae",
+          "genus": "Tilia",
+          "species": null
+        },
+        "taxon_common_name_en": "Lindens",
+        "taxon_common_name_loc": "Липа",
         "taxon_matched_name": "липа",
-        "taxon_url": "https://www.inaturalist.org/taxa/54586"
+        "taxon_url": "https://www.inaturalist.org/taxa/54586",
+        "score": 1.0
       }
     ],
+    "candidate_names": [],
+    "reason": "",
     "llm_response": null
   }
 ]

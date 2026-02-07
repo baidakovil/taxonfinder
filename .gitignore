@@ -13,3 +13,7 @@ build/
 data/gazetteer.db
 cache/
 logs/
+checkpoint/
+
+# Secrets
+.env

@@ -136,7 +136,8 @@
         "taxon_common_name_en",
         "taxon_common_name_loc",
         "taxon_matched_name",
-        "taxon_url"
+        "taxon_url",
+        "score"
       ],
       "properties": {
         "taxon_id": {
@@ -174,6 +175,10 @@
           "type": "string",
           "format": "uri",
           "description": "URL to the taxon page on iNaturalist."
+        },
+        "score": {
+          "type": "number",
+          "description": "Relevance score from iNaturalist API or synthetic score for gazetteer matches."
         }
       }
     },

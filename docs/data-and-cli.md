@@ -38,6 +38,19 @@ class TextLoader(Protocol):
 
 Требования к входному тексту: кодировка UTF-8, русский язык.
 
+### Ограничения входных данных
+
+Максимальный размер входного файла ограничен конфигурацией (`max_file_size_mb`).
+По умолчанию: **2 МБ**. Проверка выполняется перед загрузкой: если файл
+превышает лимит — фатальная ошибка с сообщением:
+
+```
+Error: Input file exceeds maximum size (2.0 MB). Current: 5.3 MB.
+Adjust max_file_size_mb in configuration if needed.
+```
+
+Это критично для веб-бэкенда (защита от DoS).
+
 ## Выходные данные
 
 Результат — JSON-файл. Формат зависит от режима вывода.
@@ -82,6 +95,7 @@ class TextLoader(Protocol):
 - `taxon_common_name_loc`: string | null — народное название для locale из конфига.
 - `taxon_matched_name`: string — имя, по которому найден таксон.
 - `taxon_url`: string — `https://www.inaturalist.org/taxa/{taxon_id}`.
+- `score`: number — релевантность совпадения (score из iNaturalist API или синтетический для газеттера).
 
 Пример:
 
@@ -127,7 +141,8 @@ class TextLoader(Protocol):
         "taxon_common_name_en": "Lindens",
         "taxon_common_name_loc": "Липа",
         "taxon_matched_name": "липа",
-        "taxon_url": "https://www.inaturalist.org/taxa/54586"
+        "taxon_url": "https://www.inaturalist.org/taxa/54586",
+        "score": 1.0
       }
     ],
     "candidate_names": [],
@@ -183,7 +198,8 @@ class TextLoader(Protocol):
         "taxon_common_name_en": "Lindens",
         "taxon_common_name_loc": "Липа",
         "taxon_matched_name": "липа",
-        "taxon_url": "https://www.inaturalist.org/taxa/54586"
+        "taxon_url": "https://www.inaturalist.org/taxa/54586",
+        "score": 1.0
       }
     ],
     "candidate_names": [],
@@ -206,10 +222,26 @@ JSON-схема: `schemas/config.schema.json`.
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
 | `confidence` | number | Минимальный порог `extraction_confidence` (0.0–1.0) | — (обязательное) |
-| `locale` | string | Locale для iNaturalist API | — (обязательное) |
+| `locale` | string | Locale для iNaturalist API и шаблонизации промптов | — (обязательное) |
 | `gazetteer_path` | string | Путь к SQLite-базе газеттера | `"data/gazetteer.db"` |
+| `spacy_model` | string | Имя модели spaCy | `"ru_core_news_md"` |
+| `max_file_size_mb` | number | Максимальный размер входного файла (МБ) | `2.0` |
 | `llm_extractor` | object\|null | Настройки LLM-экстрактора (null = отключён) | null |
 | `llm_enricher` | object\|null | Настройки LLM-обогатителя (null = отключён) | null |
+| `inaturalist` | object | Настройки iNaturalist API | см. ниже |
+
+### inaturalist
+
+| Поле | Тип | Описание | По умолчанию |
+|------|-----|----------|-------------|
+| `base_url` | string | Базовый URL API (для proxy/mock в тестах) | `"https://api.inaturalist.org"` |
+| `timeout` | number | Общий таймаут запроса (сек) | `30` |
+| `rate_limit` | number | Устойчивый rate (запросов/сек) | `1.0` |
+| `burst_limit` | integer | Максимальный burst | `5` |
+| `max_retries` | integer | Максимум повторов при ошибках | `3` |
+| `cache_enabled` | boolean | Включить disk-кэш | `true` |
+| `cache_path` | string | Путь к SQLite-базе disk-кэша | `"cache/taxonfinder.db"` |
+| `cache_ttl_days` | integer | TTL кэша (дни) | `7` |
 
 ### llm_extractor
 
@@ -251,10 +283,16 @@ taxonfinder process <input.txt> [output.json]
   дедуплицированного).
 
 ```
-taxonfinder build-gazetteer
+taxonfinder build-gazetteer --source csv --file <path.csv> --tag <tag> --locales <loc1,loc2>
 ```
 
-Построение газеттера из iNaturalist API.
+Построение газеттера из CSV-контрольного списка iNaturalist.
+См. [docs/processing.md§Построение газеттера](processing.md#построение-газеттера-builder) для подробностей.
+- `--source csv` — стратегия построения (v0.1: только `csv`).
+- `--file` — путь к CSV-файлу.
+- `--tag` — тег для маркировки источника (например, `"russia"`).
+- `--locales` — локали для загрузки common names (например, `ru,en`).
+- `--config PATH` — путь к конфигурации.
 
 ```
 taxonfinder dry-run <input.txt>
@@ -287,11 +325,26 @@ taxonfinder dry-run <input.txt>
 - Нефатальные (отдельный LLM-чанк вернул невалидный ответ, отдельный API-вызов
   завершился ошибкой после ретраев): WARNING в лог, элемент пропускается.
 
-## Логи CLI
+## Логи
 
-- Формат: текстовые строки с ISO-8601 временем, уровнем и сообщением.
+Логирование — через `structlog`.
+
+- **CLI-режим:** Human-readable formatter (цветной, ISO-8601 время, уровень, сообщение).
+- **Production/Web:** JSON formatter (`LOG_FORMAT=json` или запуск через web-адаптер).
 - Уровни: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
 - Файл: `logs/taxonfinder.log` (создаётся автоматически).
+
+## Управление секретами
+
+API-ключи для LLM-провайдеров читаются из переменных окружения
+или `.env` файла (через `python-dotenv`). **Никогда не хранятся
+в конфигурационном файле.**
+
+| Переменная | Назначение |
+|------------|----------|
+| `OPENAI_API_KEY` | Ключ для OpenAI API |
+| `ANTHROPIC_API_KEY` | Ключ для Anthropic API |
+| `LOG_FORMAT` | `json` для JSON-логов (production); по умолчанию human-readable |
 
 ## Примечания по обновлению файлов
 

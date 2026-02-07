@@ -315,12 +315,24 @@ CLI использует для обновления прогресс-бара.
 
 ```python
 class LlmClient(Protocol):
-    def complete(self, system_prompt: str, user_content: str) -> str:
+    def complete(
+        self,
+        system_prompt: str,
+        user_content: str,
+        *,
+        response_schema: dict | None = None,
+    ) -> str:
         """Send a request to LLM and return the raw response text.
 
         Args:
             system_prompt: System instruction (loaded from prompt file).
             user_content: User content (text chunk or candidate name + context).
+            response_schema: Optional JSON Schema of the expected response.
+                If the provider supports structured output (OpenAI
+                response_format, Anthropic tool use, Ollama format),
+                the schema is passed to the provider to enforce valid JSON.
+                If the provider does not support it, the schema is ignored
+                and the response is parsed with fallback cleanup.
 
         Returns:
             Raw response string from the LLM (expected to be JSON).
@@ -333,6 +345,136 @@ class LlmClient(Protocol):
 
 Реализации: `OllamaClient`, `OpenAIClient`, `AnthropicClient` — в
 `taxonfinder/extractors/llm_client.py`.
+
+**Шаблонизация промптов:** Промпт-файлы содержат плейсхолдеры `{{locale}}`,
+`{{language}}` и др. Перед отправкой в LLM файл промпта обрабатывается через
+простую подстановку (`str.replace` или `string.Template`). Значения берутся
+из `Config` (поле `locale`). Это обеспечивает мультиязычную обработку:
+`locale=ru` → промпт запрашивает русские названия, `locale=en` → английские.
+
+### TaxonSearcher
+
+Абстракция для поиска таксонов. Разделяет поиск (HTTP-запрос к API)
+и логику определения `identified`. Позволяет подключать альтернативные
+источники (GBIF, Catalogue of Life) без изменения ядра.
+
+```python
+class TaxonSearcher(Protocol):
+    def search(self, query: str, locale: str) -> list[TaxonMatch]:
+        """Search for taxa by name.
+
+        Args:
+            query: Normalized taxon name (candidate).
+            locale: Locale for common names (e.g. "ru").
+
+        Returns:
+            List of TaxonMatch (up to 5), sorted by score descending.
+            Empty list if no results found.
+
+        Raises:
+            SearchError: On connection failure or API error after retries.
+        """
+        ...
+```
+
+Реализации: `INaturalistSearcher` — в `taxonfinder/resolvers/inaturalist.py`.
+
+### IdentificationResolver
+
+Логика определения `identified` — вынесена в отдельный компонент, не зависит
+от конкретного API-провайдера. Сравнивает нормализованные и лемматизированные
+формы имён.
+
+```python
+class IdentificationResolver(Protocol):
+    def resolve(
+        self,
+        group: CandidateGroup,
+        matches: list[TaxonMatch],
+    ) -> tuple[bool, str]:
+        """Determine if the candidate is identified.
+
+        Args:
+            group: Candidate group with normalized/lemmatized forms.
+            matches: Search results from TaxonSearcher.
+
+        Returns:
+            Tuple of (identified: bool, reason: str).
+            reason is empty string when identified=True.
+        """
+        ...
+```
+
+Реализация: `DefaultIdentificationResolver` — в
+`taxonfinder/resolvers/identifier.py`.
+
+### RateLimiter
+
+Token-bucket rate limiter для HTTP-запросов. Передаётся в `TaxonSearcher`
+и `LlmClient` через DI.
+
+```python
+class RateLimiter(Protocol):
+    def acquire(self) -> None:
+        """Block until a token is available.
+
+        Uses token bucket algorithm:
+        - rate: sustained requests per second (default: 1.0 for iNaturalist)
+        - burst: maximum burst size (default: 5 for iNaturalist)
+
+        Thread-safe: can be shared between components.
+        """
+        ...
+```
+
+Реализация: `TokenBucketRateLimiter` — в `taxonfinder/rate_limiter.py`.
+Конфигурируется из секции `inaturalist` конфига (`rate_limit`, `burst_limit`).
+
+### Checkpoint
+
+Механизм промежуточного сохранения для долгих обработок. Сохраняет
+состояние после дорогостоящих фаз (Фаза 3, Фаза 4), позволяя продолжить
+обработку при сбое.
+
+```python
+class Checkpoint:
+    """Save/load intermediate pipeline state.
+
+    Checkpoint file: JSON in the working directory or temp dir.
+    Named by hash of (input_text, config), so repeated runs on
+    the same input reuse checkpoint automatically.
+    """
+
+    def save_after_resolution(
+        self,
+        resolved: list[ResolvedCandidate],
+        groups: list[CandidateGroup],
+    ) -> None:
+        """Save state after Phase 3 (resolution)."""
+        ...
+
+    def save_after_enrichment(
+        self,
+        resolved: list[ResolvedCandidate],
+    ) -> None:
+        """Save state after Phase 4 (enrichment)."""
+        ...
+
+    def load(self) -> CheckpointData | None:
+        """Load checkpoint if exists and matches current input.
+
+        Returns None if no valid checkpoint found.
+        """
+        ...
+
+    def clean(self) -> None:
+        """Remove checkpoint file after successful completion."""
+        ...
+```
+
+Реализация: `FileCheckpoint` — в `taxonfinder/checkpoint.py`.
+Хранит данные в JSON-файле. При перезапуске на том же тексте пайплайн
+обнаруживает checkpoint и продолжает с сохранённой точки.
 
 ---
 

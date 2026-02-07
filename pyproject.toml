@@ -11,6 +11,8 @@ dependencies = [
     "httpx",
     "jsonschema",
     "click",
+    "structlog",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
