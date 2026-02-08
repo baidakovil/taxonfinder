@@ -240,6 +240,31 @@
           "description": "Ollama only: stop the ollama process started automatically after the run finishes."
         }
       }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Logging configuration. CLI options override these settings.",
+      "properties": {
+        "console_level": {
+          "type": "string",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
+          "default": "INFO",
+          "description": "Log level for console output."
+        },
+        "file_level": {
+          "type": "string",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
+          "default": "DEBUG",
+          "description": "Log level for file output."
+        },
+        "log_file": {
+          "type": "string",
+          "minLength": 1,
+          "default": "logs/taxonfinder.log",
+          "description": "Path to log file (relative to project root)."
+        }
+      }
     }
   }
 }

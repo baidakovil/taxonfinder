@@ -55,14 +55,67 @@ def _load_text(input_path: Path, config: Config) -> str:
     default=False,
     help="Emit logs in JSON (overrides LOG_FORMAT env).",
 )
+@click.option(
+    "--console-log-level",
+    default=None,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Log level for console output (overrides config).",
+)
+@click.option(
+    "--file-log-level",
+    default=None,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Log level for file output (overrides config).",
+)
+@click.option(
+    "--log-file",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Path to log file (overrides config).",
+)
 @click.pass_context
-def main(ctx: click.Context, config_path: Path, json_logs: bool) -> None:
+def main(
+    ctx: click.Context,
+    config_path: Path,
+    json_logs: bool,
+    console_log_level: str | None,
+    file_log_level: str | None,
+    log_file: Path | None,
+) -> None:
     """TaxonFinder CLI."""
+    # Load config first to get logging defaults
+    try:
+        config = load_config(config_path)
+    except Exception as exc:
+        # If config fails to load, use defaults for logging and re-raise later
+        click.echo(f"Error loading config: {exc}", err=True)
+        config = None
+
+    # Determine logging settings: CLI overrides config
+    if config:
+        console_level = console_log_level or config.logging.console_level
+        file_level = file_log_level or config.logging.file_level
+        log_file_path = str(log_file) if log_file else config.logging.log_file
+    else:
+        console_level = console_log_level or "INFO"
+        file_level = file_log_level or "DEBUG"
+        log_file_path = str(log_file) if log_file else "logs/taxonfinder.log"
+
     json_mode = json_logs or os.getenv("LOG_FORMAT") == "json"
-    logger = setup_logging(json_mode=json_mode)
+    logger = setup_logging(
+        json_mode=json_mode,
+        console_level=console_level,
+        file_level=file_level,
+        log_file_path=log_file_path,
+    )
+    
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
     ctx.obj["logger"] = logger
+    
+    # If config failed to load earlier, raise now
+    if config is None:
+        raise click.ClickException(f"Failed to load config from {config_path}")
 
 
 @main.command(name="process")

@@ -206,8 +206,16 @@ def test_dry_run(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: P
 def test_json_logs_flag(monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path) -> None:
     called = {}
 
-    def fake_setup_logging(*, json_mode: bool):
+    def fake_setup_logging(
+        json_mode: bool = False,
+        console_level: str = "INFO",
+        file_level: str = "DEBUG",
+        log_file_path: str = "logs/taxonfinder.log",
+    ):
         called["json_mode"] = json_mode
+        called["console_level"] = console_level
+        called["file_level"] = file_level
+        called["log_file_path"] = log_file_path
         return object()
 
     monkeypatch.setattr("taxonfinder.cli.setup_logging", fake_setup_logging)
@@ -244,7 +252,10 @@ def test_process_failure_returns_error(
 
     monkeypatch.setattr("taxonfinder.cli.load_config", lambda path: _config())
     monkeypatch.setattr("taxonfinder.cli.load_text", lambda path, max_file_size_mb=2.0: "text")
-    monkeypatch.setattr("taxonfinder.cli.setup_logging", lambda json_mode=False: dummy_logger)
+    monkeypatch.setattr(
+        "taxonfinder.cli.setup_logging",
+        lambda json_mode=False, console_level="INFO", file_level="DEBUG", log_file_path="logs/taxonfinder.log": dummy_logger,
+    )
     monkeypatch.setattr(
         "taxonfinder.cli.process", lambda text, config: (_ for _ in ()).throw(ValueError("boom"))
     )

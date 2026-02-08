@@ -50,6 +50,13 @@ class LlmEnricherConfig:
 
 
 @dataclass
+class LoggingConfig:
+    console_level: str = "INFO"
+    file_level: str = "DEBUG"
+    log_file: str = "logs/taxonfinder.log"
+
+
+@dataclass
 class Config:
     confidence: float
     locale: str
@@ -61,6 +68,7 @@ class Config:
     inaturalist: InaturalistConfig = field(default_factory=InaturalistConfig)
     llm_extractor: LlmExtractorConfig | None = None
     llm_enricher: LlmEnricherConfig | None = None
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
 def load_config(path: Path) -> Config:
@@ -75,6 +83,7 @@ def load_config(path: Path) -> Config:
     inaturalist = _load_inaturalist(data.get("inaturalist"))
     llm_extractor = _load_llm_extractor(data.get("llm_extractor"))
     llm_enricher = _load_llm_enricher(data.get("llm_enricher"))
+    logging_config = _load_logging(data.get("logging"))
 
     return Config(
         confidence=float(data["confidence"]),
@@ -87,6 +96,7 @@ def load_config(path: Path) -> Config:
         inaturalist=inaturalist,
         llm_extractor=llm_extractor,
         llm_enricher=llm_enricher,
+        logging=logging_config,
     )
 
 
@@ -155,4 +165,14 @@ def _load_llm_enricher(data: dict | None) -> LlmEnricherConfig | None:
         auto_start=bool(data.get("auto_start", LlmEnricherConfig.auto_start)),
         auto_pull_model=bool(data.get("auto_pull_model", LlmEnricherConfig.auto_pull_model)),
         stop_after_run=bool(data.get("stop_after_run", LlmEnricherConfig.stop_after_run)),
+    )
+
+
+def _load_logging(data: dict | None) -> LoggingConfig:
+    if not data:
+        return LoggingConfig()
+    return LoggingConfig(
+        console_level=str(data.get("console_level", LoggingConfig.console_level)),
+        file_level=str(data.get("file_level", LoggingConfig.file_level)),
+        log_file=str(data.get("log_file", LoggingConfig.log_file)),
     )
