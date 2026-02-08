@@ -102,8 +102,21 @@ class LlmExtractorPhase:
 
 
 def _load_prompt(path: Path, locale: str) -> str:
-    content = path.read_text(encoding="utf-8")
-    return content.replace("{{locale}}", locale)
+    """Load prompt file, preferring locale-specific version.
+    
+    Looks for: <basename>.<locale>.txt first, then falls back to <basename>.txt
+    Example: llm_extractor.ru.txt -> llm_extractor.txt
+    """
+    # Try locale-specific file first
+    stem = path.stem  # e.g., "llm_extractor"
+    suffix = path.suffix  # e.g., ".txt"
+    locale_path = path.parent / f"{stem}.{locale}{suffix}"
+    
+    if locale_path.exists():
+        return locale_path.read_text(encoding="utf-8")
+    
+    # Fall back to base file
+    return path.read_text(encoding="utf-8")
 
 
 def _parse_json(text: str) -> dict[str, Any]:

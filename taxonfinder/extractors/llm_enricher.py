@@ -89,8 +89,21 @@ class LlmEnricherPhase:
 
 
 def _load_prompt(path: Path, locale: str) -> str:
-    content = path.read_text(encoding="utf-8")
-    return content.replace("{{locale}}", locale)
+    """Load prompt file, preferring locale-specific version.
+    
+    Looks for: <basename>.<locale>.txt first, then falls back to <basename>.txt
+    Example: llm_enricher.ru.txt -> llm_enricher.txt
+    """
+    # Try locale-specific file first
+    stem = path.stem  # e.g., "llm_enricher"
+    suffix = path.suffix  # e.g., ".txt"
+    locale_path = path.parent / f"{stem}.{locale}{suffix}"
+    
+    if locale_path.exists():
+        return locale_path.read_text(encoding="utf-8")
+    
+    # Fall back to base file
+    return path.read_text(encoding="utf-8")
 
 
 def _response_schema() -> dict[str, Any]:

@@ -27,13 +27,19 @@ class FakeRawLlmClient:
 
 
 def test_llm_extractor_uses_prompt(tmp_path: Path) -> None:
-    prompt_file = tmp_path / "prompt.txt"
-    prompt_file.write_text("Locale: {{locale}}", encoding="utf-8")
+    """Test that extractor loads locale-specific prompt file if available."""
+    # Create base prompt
+    base_prompt = tmp_path / "prompt.txt"
+    base_prompt.write_text("Base prompt in English", encoding="utf-8")
+    
+    # Create locale-specific prompt
+    ru_prompt = tmp_path / "prompt.ru.txt"
+    ru_prompt.write_text("Промпт на русском", encoding="utf-8")
 
     config = LlmExtractorConfig(
         provider="ollama",
         model="test",
-        prompt_file=str(prompt_file),
+        prompt_file=str(base_prompt),
         timeout=10,
         chunk_strategy="paragraph",
         min_chunk_words=1,
@@ -41,12 +47,22 @@ def test_llm_extractor_uses_prompt(tmp_path: Path) -> None:
     )
     llm = FakeLlmClient({"candidates": []})
 
-    extractor = LlmExtractorPhase(config, locale="ru", llm_client=llm)
-    extractor.extract("text")
+    # Test with Russian locale - should use ru-specific prompt
+    extractor_ru = LlmExtractorPhase(config, locale="ru", llm_client=llm)
+    extractor_ru.extract("text")
 
     assert llm.calls
     system_prompt, _ = llm.calls[0]
-    assert system_prompt == "Locale: ru"
+    assert system_prompt == "Промпт на русском"
+    
+    # Test with English locale - should fall back to base prompt
+    llm.calls.clear()
+    extractor_en = LlmExtractorPhase(config, locale="en", llm_client=llm)
+    extractor_en.extract("text")
+    
+    assert llm.calls
+    system_prompt, _ = llm.calls[0]
+    assert system_prompt == "Base prompt in English"
 
 
 def test_llm_extractor_parses_candidates() -> None:

@@ -251,7 +251,7 @@ JSON-схема: `schemas/config.schema.json`.
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
 | `confidence` | number | Минимальный порог `extraction_confidence` (0.0–1.0) | — (обязательное) |
-| `locale` | string | Locale для iNaturalist API и шаблонизации промптов | — (обязательное) |
+| `locale` | string | Locale для iNaturalist API и выбора локализованных промптов | — (обязательное) |
 | `gazetteer_path` | string | Путь к SQLite-базе газеттера | `"data/gazetteer.db"` |
 | `spacy_model` | string | Имя модели spaCy | `"ru_core_news_md"` |
 | `max_file_size_mb` | number | Максимальный размер входного файла (МБ) | `2.0` |
@@ -283,7 +283,7 @@ JSON-схема: `schemas/config.schema.json`.
 | `model` | string | Имя модели (напр. `"llama3.1"`, `"gpt-4o-mini"`) | — (обязательное) |
 | `url` | string | URL подключения (для Ollama обязателен) | — |
 | `timeout` | number | Таймаут в секундах | 60 |
-| `prompt_file` | string | Путь к промпту | `"prompts/llm_extractor.txt"` |
+| `prompt_file` | string | Путь к промпту (базовый файл, локализованные версии ищутся автоматически) | `"prompts/llm_extractor.txt"` |
 | `chunk_strategy` | string | `"paragraph"` или `"page"` | `"paragraph"` |
 | `min_chunk_words` | integer | Минимальный размер чанка (слов) | 50 |
 | `max_chunk_words` | integer | Максимальный размер чанка (слов) | 500 |
@@ -297,7 +297,23 @@ JSON-схема: `schemas/config.schema.json`.
 | `model` | string | Имя модели | — (обязательное) |
 | `url` | string | URL подключения | — |
 | `timeout` | number | Таймаут в секундах | 30 |
-| `prompt_file` | string | Путь к промпту | `"prompts/llm_enricher.txt"` |
+| `prompt_file` | string | Путь к промпту (базовый файл, локализованные версии ищутся автоматически) | `"prompts/llm_enricher.txt"` |
+
+#### Локализация промптов
+
+Система автоматически ищет локализованные версии промптов на основе значения `locale` в конфигурации. 
+Если указан `prompt_file = "prompts/llm_extractor.txt"` и `locale = "ru"`, система сначала попытается 
+загрузить `prompts/llm_extractor.ru.txt`. Если локализованный файл не найден, используется базовый 
+файл без суффикса локали.
+
+Формат имени локализованного промпта: `<basename>.<locale><extension>`
+
+Примеры:
+- `locale: "ru"` → `llm_extractor.ru.txt` (если существует), иначе `llm_extractor.txt`
+- `locale: "en"` → `llm_extractor.en.txt` (если существует), иначе `llm_extractor.txt`
+
+Это позволяет создавать специфичные для языка промпты, которые лучше работают с LLM для 
+соответствующего языка текста.
 
 ### logging
 
@@ -487,7 +503,8 @@ API-ключи для LLM-провайдеров читаются из пере�
 - `schemas/config.schema.json` — чанкинг, раздельные LLM-секции.
 - `schemas/output-deduplicated.schema.json` — дедуплицированный формат (по умолчанию).
 - `schemas/output-full.schema.json` — полный формат (--all-occurrences).
-- `prompts/llm_extractor.txt`, `prompts/llm_enricher.txt` — промпты LLM.
+- `prompts/llm_extractor.txt`, `prompts/llm_enricher.txt` — базовые промпты LLM (fallback).
+- `prompts/llm_extractor.ru.txt`, `prompts/llm_enricher.ru.txt` — русские локализованные промпты.
 
 Файлы, требующие обновления при дальнейшей разработке:
 - `tests/data/*.json` — обновить фикстуры при изменении формата.

@@ -35,4 +35,10 @@
     "timeout": 30,
     "prompt_file": "prompts/llm_enricher.txt"
   }
+  ,
+  "logging": {
+    "console_level": "DEBUG",
+    "file_level": "DEBUG",
+    "log_file": "logs/taxonfinder.log"
+  }
 }

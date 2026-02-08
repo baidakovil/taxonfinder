@@ -13,27 +13,49 @@ from .logging import setup_logging
 from .pipeline import estimate, format_deduplicated, format_full, process
 
 
-def _echo_progress(event: PhaseProgress) -> None:
+def _echo_progress(event: PhaseProgress, logger) -> None:
     detail = f" {event.detail}" if event.detail else ""
-    click.echo(
-        f"[{event.phase}] {event.current}/{event.total}{detail}",
-        err=True,
-    )
+    # Log progress with timestamp and structured fields
+    try:
+        msg = f"[{event.phase}] {event.current}/{event.total}{detail}"
+        logger.info(
+            msg,
+            phase=event.phase,
+            current=event.current,
+            total=event.total,
+            detail=event.detail or "",
+        )
+    except Exception:
+        # Best-effort logging; don't fail progress display
+        pass
 
 
-def _echo_summary(summary: PipelineFinished | None) -> None:
+def _echo_summary(summary: PipelineFinished | None, logger) -> None:
     if summary is None:
         return
     s = summary.summary
-    click.echo(
-        (
+    # Log structured summary
+    try:
+        msg = (
             f"Done in {s.total_time:.2f}s — "
             f"identified {s.identified_count}, "
             f"unidentified {s.unidentified_count}, "
             f"candidates {s.unique_candidates}, api_calls {s.api_calls}"
-        ),
-        err=True,
-    )
+        )
+        logger.info(
+            msg,
+            pipeline_event="pipeline_finished",
+            total_candidates=s.total_candidates,
+            unique_candidates=s.unique_candidates,
+            identified_count=s.identified_count,
+            unidentified_count=s.unidentified_count,
+            skipped_resolution=s.skipped_resolution,
+            api_calls=s.api_calls,
+            cache_hits=s.cache_hits,
+            total_time=s.total_time,
+        )
+    except Exception:
+        pass
 
 
 def _load_text(input_path: Path, config: Config) -> str:
@@ -140,7 +162,7 @@ def process_cmd(
         finished: PipelineFinished | None = None
         for event in process(text, config):
             if isinstance(event, PhaseProgress):
-                _echo_progress(event)
+                _echo_progress(event, logger)
             elif isinstance(event, ResultReady):
                 results.append(event.result)
             elif isinstance(event, PipelineFinished):
@@ -155,7 +177,7 @@ def process_cmd(
         else:
             click.echo(payload)
 
-        _echo_summary(finished)
+        _echo_summary(finished, logger)
     except Exception as exc:  # noqa: BLE001
         logger.error("cli_process_failed", error=str(exc))
         raise click.ClickException(str(exc)) from exc
