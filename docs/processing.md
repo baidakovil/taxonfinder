@@ -4,161 +4,159 @@
 Общая архитектура и пайплайн описаны в [projectdescription.md](../projectdescription.md),
 модели данных — в [docs/models.md](models.md).
 
-## Газеттер
+## Dictionary Matching
 
-Газеттер — основной экстрактор, обеспечивающий предсказуемый recall для известных названий.
-Данные загружаются из iNaturalist API и хранятся в локальной SQLite-базе
-(`data/gazetteer.db`).
+Dictionary matching — основной экстрактор, обеспечивающий предсказуемый recall для известных
+названий. Работает по-разному в зависимости от режима (`data_source`).
+
+### Online режим (data_source: "inaturalist")
+
+В online режиме используется **локальный кэш** + iNaturalist API:
+
+1. **In-memory кэш:** Словарь `normalized_name → list[TaxonMatch]` живёт в памяти на время
+   выполнения. При первом поиске "липа" выполняется запрос к API, результат сохраняется.
+   Последующие вхождения "липа" берутся из кэша.
+
+2. **Disk-кэш (опциональный):** SQLite-база `cache/taxonfinder.db` хранит пары 
+   `(query, locale) → API response` с TTL (7 дней по умолчанию). Позволяет не повторять
+   запросы при повторных запусках.
+
+3. **Запросы к iNaturalist API:** Выполняются через `/v1/taxa/autocomplete` с параметрами
+   `q=<normalized_name>&locale=<locale>`. Rate limiting через token bucket (1 req/sec, burst 5).
+
+### Offline режим (data_source: "noo_garden")
+
+В offline режиме используется **PostgreSQL база noo-garden** (~1.4M таксонов):
+
+#### Алгоритм поиска для многословных названий
+
+Многословные народные названия ("Американский лебедь", "Серохохлый очковый сорокопут") требуют
+специального подхода, т.к. в тексте слова могут быть в любом склонении и не обязательно рядом.
+
+**Таблица vernacular_name_words:**
+
+Каждое многословное название разбито на отдельные слова с POS tagging (определение части речи):
+
+```sql
+CREATE TABLE vernacular_name_words (
+  id SERIAL PRIMARY KEY,
+  vernacular_name_id INTEGER,
+  word TEXT NOT NULL,              -- "Американский", "лебедь"
+  word_position INTEGER,           -- 0, 1, 2...
+  is_head_word BOOLEAN NOT NULL    -- TRUE для существительных
+);
+```
+
+**Пример:** "Американский лебедь" → [
+  {word: "Американский", pos: 0, is_head_word: false},
+  {word: "лебедь", pos: 1, is_head_word: true}
+]
+
+**Алгоритм:**
+
+1. **Лемматизация текста** (через pymorphy3): "американского лебедя" → ["американский", "лебедь"]
+
+2. **Поиск по head_word (существительным):**
+   ```sql
+   SELECT DISTINCT vn.id, vn.vernacular_name, vn.taxon_id
+   FROM vernacular_names vn
+   JOIN vernacular_name_words vnw ON vnw.vernacular_name_id = vn.id
+   WHERE LOWER(vnw.word) = 'лебедь'  -- лемматизированное слово
+     AND vnw.is_head_word = TRUE     -- КРИТИЧНО: только существительные!
+     AND vn.language = 'ru';
+   ```
+   
+   **Почему только head_word:** Без этого фильтра "американский посол" дал бы тысячи
+   кандидатов (все таксоны со словом "американский"). Поиск только по существительным
+   исключает ложные срабатывания.
+
+3. **Получение всех слов каждого кандидата:**
+   ```sql
+   SELECT vnw.word FROM vernacular_name_words vnw
+   WHERE vnw.vernacular_name_id = 123
+   ORDER BY vnw.word_position;
+   ```
+
+4. **Проверка остальных слов в предложении** (Python):
+   ```python
+   sentence_lemmas = ["видеть", "американский", "лебедь", "в", "парк"]
+   candidate_words = ["американский", "лебедь"]  # слова кандидата (lowercase)
+   
+   matches = sum(1 for w in candidate_words if w.lower() in sentence_lemmas)
+   score = matches / len(candidate_words)  # 2/2 = 1.0 → HIGH confidence
+   ```
+
+5. **Ранжирование:**
+   - Все слова найдены (score = 1.0): HIGH confidence (0.95)
+   - Найдено главное слово + часть прилагательных (score ≥ 0.5): MEDIUM confidence (0.7)
+   - Найдено только главное слово (score < 0.5): LOW confidence (0.5)
+
+**Преимущества подхода:**
+- ✅ Находит название независимо от склонения ("американского лебедя", "американским лебедем")
+- ✅ Слова могут быть не рядом: "Прилетел хрущ. Майского окраса." → "Хрущ майский"
+- ✅ Исключает ложные срабатывания: "американский посол" не даст кандидатов ("посол" не head_word)
+- ✅ Работает с прилагательными в начале: "Американский лебедь", "Серохохлый сорокопут"
+
+#### Стратегия поиска для односложных и латинских названий
+
+**Для народных односложных названий:**
+1. Exact match через functional index: `WHERE LOWER(REPLACE(vernacular_name, 'ё', 'е')) = 'елка'`
+2. Fuzzy match (не реализовано в v0.1, требует pg_trgm для кириллицы)
+
+**Для латинских названий:**
+1. Exact match через functional index: `WHERE LOWER(name) = 'tilia cordata'`
+2. **Fuzzy match через pg_trgm** (опционально, если включен в noo-garden):
+   ```sql
+   SELECT name, similarity(name, 'Tila cordata') AS score
+   FROM taxa
+   WHERE name % 'Tila cordata'  -- оператор % использует trigram similarity
+   ORDER BY score DESC LIMIT 5;
+   ```
+   Находит латинские названия с опечатками: "Tila cordata" → "Tilia cordata" (score ~0.8)
+
+#### Извлечение таксономии и ранжирование
+
+**Таксономия:** Денормализованные поля из `taxa` (`kingdom`, `phylum`, `class_name`, 
+`order_name`, `family`, `genus`) используются напрямую без JOIN.
+
+**Ранжирование результатов:**
+- Все слова многословного названия найдены + `is_preferred = true`: score = 0.95
+- Все слова найдены + `is_preferred = false`: score = 0.9
+- Часть слов найдена (≥50%): score = 0.7
+- Exact match односложного + `is_preferred`: score = 1.0
+- Fuzzy match (trigram): score от similarity() (0.0–1.0)
+
+**Фильтрация по языку:** Всегда добавляется `WHERE language = :locale`.
+
+**Примечание:** Для оптимальной работы offline режима в noo-garden должны быть созданы
+table `vernacular_name_words` с POS tagging, functional indexes для нормализации,
+и опционально pg_trgm индексы для fuzzy matching. См. раздел "Рекомендации по оптимизации
+noo-garden" в [projectdescription.md](../projectdescription.md).
 
 ### Требуемые данные
 
-Для каждого таксона в газеттере хранятся:
+Для каждого таксона должны быть доступны:
 - **taxon_id** — идентификатор таксона в iNaturalist.
 - **taxon_name** — научное (латинское) название.
 - **taxon_rank** — таксономический ранг (species, genus, family и т.д.).
-- **ancestry** — цепочка предковых таксонов для будущей фильтрации по таксономическому
-  дереву.
-- **Все common names** для настроенных локалей (как минимум `ru` и `en`):
-  название, флаг `is_preferred`, `locale`, `lexicon`.
+- **Таксономическая иерархия** — kingdom, phylum, class, order, family, genus, species.
+- **Common names** для настроенной локали: название, флаг `is_preferred` (если доступен).
 
-Источник данных: поля `name`, `rank`, `ancestry`, `preferred_common_name`, `names` из
-объектов Taxon, получаемых через iNaturalist API.
+## Regex-детектор латинских биномиалов (опциональный)
 
-### Схема SQLite
+**Статус:** Опциональный экстрактор, включается параметром `enable_regex_extractor` в конфигурации.
+В offline режиме (noo-garden) **может быть отключен**, если база данных всегда актуальна и
+включен fuzzy matching через pg_trgm (обрабатывает опечатки без regex).
 
-```sql
--- Версия схемы хранится в PRAGMA user_version (целое число).
--- Проверка: PRAGMA user_version;
--- Установка: PRAGMA user_version = 1;
-
-CREATE TABLE taxa (
-    taxon_id INTEGER PRIMARY KEY,
-    taxon_name TEXT NOT NULL,
-    taxon_rank TEXT NOT NULL,
-    ancestry TEXT
-);
-
-CREATE TABLE common_names (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    taxon_id INTEGER NOT NULL REFERENCES taxa(taxon_id),
-    name TEXT NOT NULL,
-    name_normalized TEXT NOT NULL,
-    name_lemmatized TEXT,
-    locale TEXT NOT NULL,
-    is_preferred BOOLEAN DEFAULT 0,
-    lexicon TEXT
-);
-
-CREATE INDEX idx_cn_normalized ON common_names(name_normalized);
-CREATE INDEX idx_cn_lemmatized ON common_names(name_lemmatized);
-CREATE INDEX idx_cn_locale ON common_names(locale);
-CREATE INDEX idx_cn_taxon ON common_names(taxon_id);
-```
-
-Версия схемы хранится через `PRAGMA user_version`. При запуске приложение проверяет
-совместимость и завершается с понятным сообщением об ошибке при несовпадении версии.
-
-### Загрузка в runtime
-
-При старте:
-1. Открывает `data/gazetteer.db` (путь из конфигурации, поле `gazetteer_path`).
-2. Проверяет `schema_version`.
-3. Загружает `name_normalized` и `name_lemmatized` для настроенной локали
-   в spaCy `PhraseMatcher`.
-4. Хранит в памяти маппинг `name_normalized → list[taxon_id]` для быстрого поиска.
-
-При совпадении PhraseMatcher возвращает span, по которому из маппинга извлекаются
-`taxon_id`, а из SQLite — полная информация о таксоне.
-
-### Оценка объёма
-
-Газеттер не загружает все таксоны iNaturalist (их миллионы). Набор ограничивается
-критериями загрузчика (контрольный список, place_id, iconic taxa и т.д.). Ориентировочный
-размер: 50 000–200 000 common names. PhraseMatcher с таким количеством паттернов
-потребляет ~100–500 МБ RAM и инициализируется за несколько секунд.
-
-### Обновление
-
-Газеттер строится отдельной CLI-командой (`taxonfinder build-gazetteer`) и не обновляется
-автоматически. Пересборка выполняется вручную при необходимости.
-
-### Построение газеттера (builder)
-
-Builder — отдельная подсистема для заполнения SQLite-базы газеттера из внешних
-источников. Реализуется в `taxonfinder/gazetteer/builder.py`.
-
-#### Сценарий 1: CSV-контрольный список (v0.1)
-
-**Вход:** CSV-файл контрольного списка iNaturalist (checklist export).
-Столбцы: `taxon_name`, `description`, `occurrence_status`, `establishment_means`,
-`adding_user_login`, `first_observation`, `last_observation`, `url`,
-`created_at`, `updated_at`, `taxon_common_name`.
-
-Пример файла: `data/control_list/7502-Russia-Check-List.csv` (~42 000 таксонов).
-
-**Алгоритм:**
-1. Парсинг CSV: извлечение столбца `taxon_name` (научное название).
-2. Для каждого `taxon_name` —запрос к iNaturalist API:
-   - `/v1/taxa?q={taxon_name}&is_active=true` → получение `taxon_id`, `rank`,
-     `ancestry`, `names` (все common names).
-3. Из ответа извлекаются common names для настроенных локалей (`ru`, `en`).
-4. Данные записываются в SQLite-базу (таблицы `taxa`, `common_names`).
-   Нормализация и лемматизация common names выполняется при записи.
-5. Записи тегируются (таблица `taxon_tags` или поле `tag` в `taxa`),
-   чтобы различать источники. Для данного файла тег: `"russia"`.
-
-**CLI:**
-```
-taxonfinder build-gazetteer \
-  --source csv \
-  --file data/control_list/7502-Russia-Check-List.csv \
-  --tag russia \
-  --locales ru,en
-```
-
-**Оценка:**
-- ~42 000 таксонов.
-- **Параллелизм:** iNaturalist API допускает burst до 5 запросов.
-  Builder использует `concurrent.futures.ThreadPoolExecutor(max_workers=5)`
-  с общим rate limiter (token bucket). Это ускоряет построение в ~3–5 раз
-  (до ~3–4 часов вместо 12). Ограничение «синхронное ядро» на builder
-  не распространяется — это отдельная утилита.
-- **Возобновление (resume):** при перезапуске builder проверяет
-  таблицу `taxa` и пропускает уже обработанные таксоны (skip по
-  наличию `taxon_id` в БД). Для гарантии целостности
-  запись одного таксона (`INSERT taxa` + `INSERT common_names`)
-  выполняется в одной транзакции (`BEGIN`/`COMMIT`).
-  Если транзакция не завершилась (сбой), запись откатывается
-  и таксон будет обработан повторно при следующем запуске.
-- **Отмена (graceful shutdown):** builder обрабатывает SIGINT
-  (Ctrl+C): ожидает завершения текущих запросов в thread pool,
-  коммитит все завершённые транзакции и завершается.
-  Данные, уже записанные в SQLite, сохраняются.
-  Повторный запуск продолжит с места остановки.
-- Ошибки отдельных запросов логируются и пропускаются.
-
-**Схема SQLite — расширение для тегов:**
-
-```sql
-CREATE TABLE taxon_tags (
-    taxon_id INTEGER NOT NULL REFERENCES taxa(taxon_id),
-    tag TEXT NOT NULL,
-    PRIMARY KEY (taxon_id, tag)
-);
-
-CREATE INDEX idx_tags_tag ON taxon_tags(tag);
-```
-
-Другие сценарии построения (по `place_id`, по iconic taxa, по произвольному
-списку видов) будут разрабатываться позже. Архитектура builder допускает
-добавление новых стратегий без изменения runtime газеттера.
-
-## Regex-детектор латинских биномиалов
+В online режиме **рекомендуется включать** как fallback для недавно описанных видов,
+которых может не быть в локальном кэше.
 
 Базовый паттерн: `[A-Z][a-z]+ [a-z]+( [a-z]+)?` — ловит латинские биномиалы, но
 даёт ложные срабатывания на небиологических латинских фразах, именах собственных
-и географических названиях. В русскоязычном тексте проблема смягчена (латиница
-выделяется на фоне кириллицы), но фильтрация необходима.
+и географических названиях. Фильтрация необходима для повышения точности.
+
+**Альтернатива в offline режиме:** Fuzzy matching через PostgreSQL pg_trgm — находит
+латинские названия с опечатками напрямую из базы noo-garden без regex.
 
 ### Эвристические фильтры (применяются последовательно)
 
@@ -168,20 +166,22 @@ CREATE INDEX idx_tags_tag ON taxon_tags(tag);
    «Ad libitum», «In situ», «Ex vivo», «De facto», «Pro rata», «Per se»,
    «Ab initio», «Status quo», «Modus operandi», «Alma mater», «Anno domini».
    Хранится как константа в `extractors/latin.py`, может быть расширен.
-3. **Проверка по газеттеру:** если совпадение найдено в `taxa.taxon_name` — кандидат
-   подтверждён (confidence повышается до 0.9).
+3. **Верификация через основной источник данных** (Фаза 3): если совпадение найдено
+   в источнике данных (iNaturalist API или noo-garden) — кандидат подтверждён 
+   (confidence повышается до 0.9).
 4. **Контекстная эвристика:** если совпадение следует непосредственно за обращением
    (Mr., Dr., Prof., von, van) — вероятно имя человека, кандидат отклоняется.
 
 Порядок:
 
 ```
-regex match → фильтр длины → стоп-лист → проверка газеттера → контекстная эвристика
-            → прошёл все фильтры? → кандидат
+regex match → фильтр длины → стоп-лист → контекстная эвристика → кандидат
+                                                                     ↓
+                                                    (Фаза 3: верификация через основной источник)
 ```
 
-Кандидаты, прошедшие фильтры, но не найденные в газеттере, всё равно отправляются
-в iNaturalist для верификации на Фазе 3.
+Кандидаты, прошедшие фильтры, отправляются на Фазу 3 для верификации через основной
+источник данных (iNaturalist API в online режиме, noo-garden в offline режиме).
 
 ## LLM
 
@@ -297,52 +297,108 @@ LLM-обогатитель может использовать другую мо
 
 ## Нормализация текста
 
-Нормализация применяется к кандидатам перед поиском в iNaturalist и при сравнении
+Нормализация применяется к кандидатам перед поиском в источнике данных и при сравнении
 для определения `identified`.
 
-Шаги:
-1. Приведение к нижнему регистру.
-2. Замена `ё` на `е` (оригинальная форма сохраняется как дополнительный вариант поиска).
-3. Лемматизация через pymorphy3 (для русских слов). spaCy используется для токенизации,
-   но для корректной леммы русских слов (особенно редких/биологических) используется
-   pymorphy3 напрямую. Для многословных названий — лемматизация каждого слова отдельно.
-4. Для латинских слов — только lowercase, без лемматизации.
+### В коде TaxonFinder (runtime)
 
-Результат — набор вариантов для поиска:
-- оригинальная форма (lowercase),
-- форма с заменой ё→е,
-- лемматизированная форма,
-- лемматизированная форма с заменой ё→е.
+**Для текста из книги:**
+
+1. **Лемматизация** через pymorphy3 (для языков с богатой морфологией: русский, украинский):
+   - "американского лебедя" → ["американский", "лебедь"]
+   - Для многословных названий — лемматизация каждого слова отдельно
+   - spaCy используется только для токенизации и сегментации
+
+2. **Нормализация для поиска в БД:**
+   ```python
+   def normalize_for_db(text: str) -> str:
+       """Должна точно соответствовать functional index в БД!"""
+       return text.lower().replace('ё', 'е')
+   ```
+
+3. **Для латинских названий:** только lowercase, без лемматизации
+
+**Критично:** Функция нормализации в коде должна **точно соответствовать** functional index
+в PostgreSQL. Иначе индекс не будет использоваться!
+
+### В базе данных noo-garden (functional indexes)
+
+Вместо дублирования данных в отдельных колонках используются **functional indexes**:
+
+```sql
+-- Для народных названий (lowercase + ё→е)
+CREATE INDEX idx_vn_name_normalized ON vernacular_names 
+  USING btree (LOWER(REPLACE(vernacular_name, 'ё', 'е')));
+
+-- Для слов многословных названий
+CREATE INDEX idx_vnw_lower ON vernacular_name_words 
+  USING btree (LOWER(word));
+
+-- Для латинских названий
+CREATE INDEX idx_taxa_name_lower ON taxa 
+  USING btree (LOWER(name));
+```
+
+**Преимущества functional indexes:**
+- ✅ Не дублируют данные (экономия места)
+- ✅ Автоматически обновляются при изменении исходных данных
+- ✅ Производительность такая же, как у обычных индексов
+- ✅ Упрощают схему БД
+
+**SQL запросы с functional indexes:**
+
+```sql
+-- PostgreSQL автоматически использует functional index
+SELECT * FROM vernacular_names 
+WHERE LOWER(REPLACE(vernacular_name, 'ё', 'е')) = 'елка'
+  AND language = 'ru';
+
+-- Для слов (используется LOWER без замены ё→е, т.к. в словаре уже нормализовано)
+SELECT * FROM vernacular_name_words
+WHERE LOWER(word) = 'лебедь';
+```
+
+**Важно:** Названия в таблице `vernacular_names` уже хранятся в **начальной форме**
+(именительный падеж, единственное число), поэтому отдельная колонка для лемматизации
+не нужна. Лемматизация выполняется только для текста пользователя при поиске.
 
 ## Модель extraction_confidence
 
 > **Placeholder:** Текущая модель extraction_confidence — статическая и грубая.
-> Фиксированные значения не учитывают quality of match из iNaturalist API,
+> Фиксированные значения не учитывают quality of match из источника данных,
 > контекст (заголовок vs. текст), частоту слова в языке и другие сигналы.
 > Модель будет доработана на основе golden dataset.
 
-Значение `extraction_confidence` зависит от метода извлечения и **количества таксонов**,
-на которые маппится совпавшее название в газеттере (фактор неоднозначности).
+Значение `extraction_confidence` зависит от метода извлечения, **количества таксонов**,
+на которые маппится совпавшее название (фактор неоднозначности), и **полноты совпадения**
+для многословных названий.
 
 | Метод | Условие | confidence |
 |-------|---------|------------|
-| Газеттер, exact match | 1 taxon_id в газеттере | 1.0 |
-| Газеттер, exact match | 2+ taxon_id (неоднозначность) | 0.8 |
-| Газеттер, lemma match | 1 taxon_id | 0.9 |
-| Газеттер, lemma match | 2+ taxon_id | 0.7 |
-| Regex | подтверждён газеттером (`taxon_name` найден) | 0.9 |
-| Regex | не найден в газеттере | 0.7 |
+| Dictionary, все слова найдены | 1 taxon_id + is_preferred | 0.95 |
+| Dictionary, все слова найдены | 1 taxon_id | 0.9 |
+| Dictionary, все слова найдены | 2+ taxon_id (неоднозначность) | 0.8 |
+| Dictionary, часть слов (≥50%) | 1 taxon_id | 0.7 |
+| Dictionary, часть слов (≥50%) | 2+ taxon_id | 0.6 |
+| Dictionary, только head_word | любое число taxon_id | 0.5 |
+| Fuzzy match (pg_trgm) | зависит от similarity score | 0.5–0.9 |
+| Regex | подтверждён на Фазе 3 | 0.9 |
+| Regex | не подтверждён на Фазе 3 | 0.7 |
 | LLM | по умолчанию (или значение от LLM, не более 0.8) | 0.6 |
 
-**Фактор неоднозначности:** если `name_normalized` маппится на N различных `taxon_id`
-в газеттере, confidence снижается. Это отражает тот факт, что омонимичные названия
+**Фактор неоднозначности:** если `name_normalized` маппится на N различных `taxon_id`,
+confidence снижается. Это отражает тот факт, что омонимичные названия
 (например, «журавль» — и птица, и народное название нескольких растений) менее надёжны
 как идентификатор конкретного таксона.
 
+**Примечание:** В offline режиме (noo-garden) количество taxon_id для кандидата
+определяется количеством различных таксонов в результате SQL-запроса. В online
+режиме (iNaturalist API) — количеством результатов autocomplete с близким score.
+
 ## Критерии identified
 
-`identified` определяется после разрешения через iNaturalist (Фаза 3) или напрямую
-из газеттера (для кандидатов, пропустивших Фазу 3).
+`identified` определяется после разрешения через основной источник данных (Фаза 3).
+Логика одинакова для online и offline режимов.
 
 Сравнение выполняется **по обоим вариантам**: нормализованная форма (lowercase, ё→е)
 **и** лемматизированная форма. Совпадение любого варианта считается успешным.
@@ -388,18 +444,23 @@ LLM-обогатитель может использовать другую мо
 
 ### Кэширование
 
-Два уровня:
+**Online режим:**
+Два уровня кэша:
 
 1. **In-memory** (обязательный): словарь `normalized_lemma → resolution_result`,
    живёт в пределах одного запуска. Обеспечивает дедупликацию.
 2. **Disk-кэш** (опциональный): SQLite-база `cache/taxonfinder.db`. Хранит пары
-   `(query, locale) → iNaturalist response` с TTL (7 дней по умолчанию). Позволяет
-   не повторять запросы при повторном запуске на том же или похожем тексте.
+   `(query, locale) → iNaturalist API response` с TTL (7 дней по умолчанию). 
+   Позволяет не повторять запросы при повторном запуске на том же или похожем тексте.
 
-### Версионирование баз данных
+**Offline режим:**
+Используется только in-memory кэш для дедупликации. Disk-кэш не нужен, т.к. все
+запросы идут в локальную PostgreSQL базу (достаточно быстро).
 
-Обе SQLite-базы (газеттер и disk-кэш) используют `PRAGMA user_version` для хранения
-версии схемы:
+### Версионирование базы disk-кэша
+
+SQLite-база disk-кэша (только online режим) использует `PRAGMA user_version` для 
+хранения версии схемы:
 
 ```sql
 -- Проверка версии:
@@ -411,8 +472,7 @@ PRAGMA user_version = 1;
 
 Это атомарный и встроенный механизм SQLite, не требующий отдельной таблицы.
 При запуске приложение проверяет `user_version` и завершается с понятным сообщением
-об ошибке при несовместимой версии схемы. При обновлении схемы базы данных
-версия инкрементируется.
+об ошибке при несовместимой версии схемы. При обновлении схемы версия инкрементируется.
 
 ## Промежуточное сохранение (Checkpoint)
 
@@ -439,8 +499,10 @@ PRAGMA user_version = 1;
 
 ## Модель spaCy
 
-По умолчанию используется `ru_core_news_md`. Модель конфигурируется
-через поле `spacy_model` в конфигурации. Влияние выбора модели:
+Модель spaCy конфигурируется через поле `spacy_model` в конфигурации. Выбор модели
+зависит от языка текста (параметр `locale`).
+
+**Для русского языка (`locale: "ru"`):**
 
 | Модель | Размер | Качество сегментации | Время загрузки |
 |--------|--------|---------------------|----------------|
@@ -448,16 +510,31 @@ PRAGMA user_version = 1;
 | `ru_core_news_md` | ~45 MB | Хорошее (рекомендуется) | ~2 сек |
 | `ru_core_news_lg` | ~500 MB | Лучшее | ~5 сек |
 
+**Для других языков:**
+- Английский: `en_core_web_sm`, `en_core_web_md`, `en_core_web_lg`
+- Французский: `fr_core_news_sm`, `fr_core_news_md`, `fr_core_news_lg`
+- Испанский: `es_core_news_sm`, `es_core_news_md`, `es_core_news_lg`
+- Немецкий: `de_core_news_sm`, `de_core_news_md`, `de_core_news_lg`
+- См. полный список на [spacy.io/models](https://spacy.io/models)
+
 Модель должна быть предварительно установлена:
-```
+```bash
 python -m spacy download ru_core_news_md
+# или для другого языка:
+python -m spacy download en_core_web_md
 ```
 
-## Rate Limiting
+**Примечание:** Для языков с богатой морфологией (русский, украинский, польский и др.)
+дополнительно используется pymorphy3 для более точной лемматизации. Для остальных
+языков лемматизация выполняется через spaCy.
 
-HTTP-запросы к iNaturalist API (и потенциально к другим источникам)
-регулируются через `RateLimiter` — отдельный компонент, передаваемый
-в `TaxonSearcher` и другие HTTP-клиенты через DI.
+## Rate Limiting (только online режим)
+
+В **online режиме** HTTP-запросы к iNaturalist API регулируются через `RateLimiter` —
+отдельный компонент, передаваемый в `TaxonSearcher` и другие HTTP-клиенты через DI.
+
+В **offline режиме** rate limiting не применяется, т.к. все запросы идут в локальную
+PostgreSQL базу.
 
 **Алгоритм: Token Bucket.**
 

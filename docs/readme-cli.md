@@ -1,6 +1,6 @@
 # TaxonFinder CLI
 
-Command-line interface for running the pipeline, estimating workload, and (soon) building gazetteers.
+Command-line interface for running the pipeline and estimating workload.
 
 ## Installation
 
@@ -35,16 +35,13 @@ python -m taxonfinder.cli process INPUT_PATH [OUTPUT_PATH] [--all-occurrences]
 Progress is printed to stderr (phase, counters). Summary line shows elapsed time and counts. JSON envelope is versioned (`{"version": "1.0", ...}`).
 
 ### dry-run
-Estimate work without calling external APIs/LLMs.
+Estimate work without calling external data sources or LLMs.
 
 ```bash
 python -m taxonfinder.cli dry-run INPUT_PATH
 ```
 
-Prints counts of sentences, chunks, candidates, estimated API calls, and time. Useful for sizing workloads.
-
-### build-gazetteer (planned)
-Placeholder for Step 7. Will populate SQLite gazetteers from CSV + iNaturalist. Currently raises `ClickException` to signal unimplemented status.
+Prints counts of sentences, chunks, candidates, estimated data source queries (iNaturalist API or noo-garden), and time. Useful for sizing workloads.
 
 ## Logging
 
@@ -58,7 +55,7 @@ Placeholder for Step 7. Will populate SQLite gazetteers from CSV + iNaturalist. 
 - Non-zero on validation errors, processing errors, or unimplemented commands (`build-gazetteer`).
 
 ## Testing
-
+connection issues with data sources
 CLI is covered by `tests/test_cli.py` using `click.testing.CliRunner` (no subprocess needed).
 
 ### Ollama lifecycle helpers

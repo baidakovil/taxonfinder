@@ -130,7 +130,7 @@ Adjust max_file_size_mb in configuration if needed.
       "source_text": "липа",
       "identified": true,
       "extraction_confidence": 1.0,
-      "extraction_method": "gazetteer",
+      "extraction_method": "dictionary",
       "count": 3,
       "occurrences": [
         {
@@ -208,7 +208,7 @@ Adjust max_file_size_mb in configuration if needed.
       "source_context": "На перевале росла огромная липа.",
       "identified": true,
       "extraction_confidence": 1.0,
-      "extraction_method": "gazetteer",
+      "extraction_method": "dictionary",
       "matches": [
         {
           "taxon_id": 54586,
@@ -251,17 +251,17 @@ JSON-схема: `schemas/config.schema.json`.
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
 | `confidence` | number | Минимальный порог `extraction_confidence` (0.0–1.0) | — (обязательное) |
-| `locale` | string | Locale для iNaturalist API и выбора локализованных промптов | — (обязательное) |
-| `gazetteer_path` | string | Путь к SQLite-базе газеттера | `"data/gazetteer.db"` |
-| `spacy_model` | string | Имя модели spaCy | `"ru_core_news_md"` |
+| `locale` | string | Locale для выбора языка обработки и локализованных промптов | — (обязательное) |
+| `data_source` | string | `"inaturalist"` (online) или `"noo_garden"` (offline) | — (обязательное) |
+| `spacy_model` | string | Имя модели spaCy для выбранного языка | — (обязательное) |
 | `max_file_size_mb` | number | Максимальный размер входного файла (МБ) | `2.0` |
-| `degraded_mode` | boolean | Разрешить работу без газеттера (WARNING, но не фатальная ошибка) | `false` |
 | `user_agent` | string | Значение заголовка User-Agent для HTTP-запросов | `"TaxonFinder/0.1.0"` |
 | `llm_extractor` | object\|null | Настройки LLM-экстрактора (null = отключён) | null |
 | `llm_enricher` | object\|null | Настройки LLM-обогатителя (null = отключён) | null |
-| `inaturalist` | object | Настройки iNaturalist API | см. ниже |
+| `inaturalist` | object | Настройки iNaturalist API (только для online режима) | см. ниже |
+| `noo_garden` | object | Настройки PostgreSQL noo-garden (только для offline режима) | см. ниже |
 
-### inaturalist
+### inaturalist (только data_source: "inaturalist")
 
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
@@ -273,6 +273,29 @@ JSON-схема: `schemas/config.schema.json`.
 | `cache_enabled` | boolean | Включить disk-кэш | `true` |
 | `cache_path` | string | Путь к SQLite-базе disk-кэша | `"cache/taxonfinder.db"` |
 | `cache_ttl_days` | integer | TTL кэша (дни) | `7` |
+
+### noo_garden (только data_source: "noo_garden")
+
+| Поле | Тип | Описание | По умолчанию |
+|------|-----|----------|-------------|
+| `host` | string | Хост PostgreSQL | `"localhost"` |
+| `port` | integer | Порт PostgreSQL | `5432` |
+| `database` | string | Имя базы данных | `"noo_garden"` |
+| `user` | string | Пользователь PostgreSQL | `"postgres"` |
+| `password` | string | Пароль (поддерживает `${ENV_VAR}`) | — (обязательное) |
+| `schema` | string | Схема PostgreSQL | `"public"` |
+
+**Примечание:** Пароль должен быть задан через переменную окружения. Пример:
+```json
+"noo_garden": {
+  "host": "localhost",
+  "port": 5432,
+  "database": "noo_garden",
+  "user": "postgres",
+  "password": "${POSTGRES_PASSWORD}",
+  "schema": "public"
+}
+```
 
 ### llm_extractor
 
@@ -363,33 +386,23 @@ taxonfinder process <input.txt> [output.json]
   дедуплицированного).
 
 ```
-taxonfinder build-gazetteer --source csv --file <path.csv> --tag <tag> --locales <loc1,loc2>
-```
-
-Построение газеттера из CSV-контрольного списка iNaturalist.
-См. [docs/processing.md§Построение газеттера](processing.md#построение-газеттера-builder) для подробностей.
-- `--source csv` — стратегия построения (v0.1: только `csv`).
-- `--file` — путь к CSV-файлу.
-- `--tag` — тег для маркировки источника (например, `"russia"`).
-- `--locales` — локали для загрузки common names (например, `ru,en`).
-- `--config PATH` — путь к конфигурации.
-
-```
 taxonfinder dry-run <input.txt>
 ```
 
-Предварительный анализ текста без обращения к API и LLM. Выводит:
+Предварительный анализ текста без обращения к источникам данных и LLM. Выводит:
 - Общее число предложений в тексте.
 - Число чанков для LLM-экстрактора (при текущей `chunk_strategy` и лимитах).
 - Ожидаемое число LLM-вызовов (Фаза 1).
-- Оценку числа уникальных кандидатов (на основе газеттера и regex — без LLM).
-- Оценку числа запросов к iNaturalist API (Фаза 3).
+- Оценку числа уникальных кандидатов (на основе dictionary matching и regex — без LLM).
+- Оценку числа запросов к источнику данных (Фаза 3).
 - Оценку времени обработки.
 
 `--config PATH` — используется для определения параметров чанкинга и включённых
 экстракторов.
 
-## Ограничения по iNaturalist API
+## Ограничения источников данных
+
+### Online режим (iNaturalist API)
 
 - **Rate limit:** token bucket — 1 запрос/сек устойчивая нагрузка, burst до 5 запросов.
 - **Retry:** при ошибках 429 (Too Many Requests) или 5xx — повтор до 3 раз
@@ -398,13 +411,20 @@ taxonfinder dry-run <input.txt>
 - **Кэширование:** in-memory (обязательное) + disk (опциональное) снижают число
   реальных обращений.
 
+### Offline режим (noo-garden PostgreSQL)
+
+- **Производительность:** зависит от индексов в базе noo-garden. См. рекомендации
+  по оптимизации в [projectdescription.md](../projectdescription.md).
+- **Подключение:** используется connection pool для эффективного использования
+  соединений с PostgreSQL.
+- **Timeout:** по умолчанию 30 секунд на запрос.
+
 ## Обработка ошибок
 
-- Фатальные ошибки (файл не найден, конфигурация невалидна, газеттер отсутствует
-  при `degraded_mode: false`):
+- Фатальные ошибки (файл не найден, конфигурация невалидна, недоступен источник данных):
   ненулевой код выхода + сообщение в stderr.
-- При `degraded_mode: true` отсутствие газеттера — WARNING в лог,
-  пайплайн продолжает с доступными экстракторами (regex, LLM).
+- При недоступности offline источника (noo-garden) — фатальная ошибка.
+- При недоступности online источника (iNaturalist API) — попытка retry, затем ошибка.
 - Нефатальные (отдельный LLM-чанк вернул невалидный ответ, отдельный API-вызов
   завершился ошибкой после ретраев): WARNING в лог, элемент пропускается.
 
@@ -508,7 +528,7 @@ taxonfinder --log-file /var/log/taxonfinder/app.log process input.txt
 
 ## Управление секретами
 
-API-ключи для LLM-провайдеров читаются из переменных окружения
+API-ключи и пароли баз данных читаются из переменных окружения
 или `.env` файла (через `python-dotenv`). **Никогда не хранятся
 в конфигурационном файле.**
 
@@ -516,6 +536,7 @@ API-ключи для LLM-провайдеров читаются из пере�
 |------------|----------|
 | `OPENAI_API_KEY` | Ключ для OpenAI API |
 | `ANTHROPIC_API_KEY` | Ключ для Anthropic API |
+| `POSTGRES_PASSWORD` | Пароль для PostgreSQL noo-garden (offline режим) |
 | `LOG_FORMAT` | `json` для JSON-логов (production); по умолчанию human-readable |
 
 ## Примечания по обновлению файлов
