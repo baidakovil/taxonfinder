@@ -14,6 +14,7 @@ data/gazetteer.db
 cache/
 logs/
 checkpoint/
+result.json
 
 # Secrets
 .env
