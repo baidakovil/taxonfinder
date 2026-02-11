@@ -8,7 +8,7 @@
   "user_agent": "TaxonFinder/0.1.0",
   "inaturalist": {
     "base_url": "https://api.inaturalist.org",
-    "timeout": 30,
+    "timeout": 120,
     "rate_limit": 1.0,
     "burst_limit": 5,
     "max_retries": 3,
@@ -17,18 +17,18 @@
     "cache_ttl_days": 7
   },
   "llm_extractor": {
-    "enabled": true,
+    "enabled": false,
     "provider": "ollama",
     "model": "llama3.1",
     "url": "http://localhost:11434",
-    "timeout": 60,
+    "timeout": 120,
     "prompt_file": "prompts/llm_extractor.txt",
     "chunk_strategy": "paragraph",
     "min_chunk_words": 50,
     "max_chunk_words": 500
   },
   "llm_enricher": {
-    "enabled": true,
+    "enabled": false,
     "provider": "ollama",
     "model": "llama3.1",
     "url": "http://localhost:11434",

@@ -279,8 +279,8 @@ JSON-схема: `schemas/config.schema.json`.
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
 | `enabled` | boolean | Включён ли экстрактор | true |
-| `provider` | string | `"ollama"`, `"openai"`, `"anthropic"` | — (обязательное) |
-| `model` | string | Имя модели (напр. `"llama3.1"`, `"gpt-4o-mini"`) | — (обязательное) |
+| `provider` | string | `"ollama"`, `"openai"`, `"anthropic"` | — (обязательно при `enabled: true`) |
+| `model` | string | Имя модели (напр. `"llama3.1"`, `"gpt-4o-mini"`) | — (обязательно при `enabled: true`) |
 | `url` | string | URL подключения (для Ollama обязателен) | — |
 | `timeout` | number | Таймаут в секундах | 60 |
 | `prompt_file` | string | Путь к промпту (базовый файл, локализованные версии ищутся автоматически) | `"prompts/llm_extractor.txt"` |
@@ -288,16 +288,37 @@ JSON-схема: `schemas/config.schema.json`.
 | `min_chunk_words` | integer | Минимальный размер чанка (слов) | 50 |
 | `max_chunk_words` | integer | Максимальный размер чанка (слов) | 500 |
 
+**Отключение LLM-экстрактора:** Чтобы использовать только газеттер и regex-детектор латинских названий, 
+установите `"enabled": false`. В этом случае поля `provider` и `model` необязательны:
+
+```json
+"llm_extractor": {
+  "enabled": false
+}
+```
+
 ### llm_enricher
 
 | Поле | Тип | Описание | По умолчанию |
 |------|-----|----------|-------------|
 | `enabled` | boolean | Включён ли обогатитель | true |
-| `provider` | string | `"ollama"`, `"openai"`, `"anthropic"` | — (обязательное) |
-| `model` | string | Имя модели | — (обязательное) |
+| `provider` | string | `"ollama"`, `"openai"`, `"anthropic"` | — (обязательно при `enabled: true`) |
+| `model` | string | Имя модели | — (обязательно при `enabled: true`) |
 | `url` | string | URL подключения | — |
 | `timeout` | number | Таймаут в секундах | 30 |
 | `prompt_file` | string | Путь к промпту (базовый файл, локализованные версии ищутся автоматически) | `"prompts/llm_enricher.txt"` |
+
+**Отключение LLM-обогатителя:** Если не нужна Фаза 4 (обогащение неразрешённых кандидатов через LLM), 
+установите `"enabled": false`. В этом случае поля `provider` и `model` необязательны:
+
+```json
+"llm_enricher": {
+  "enabled": false
+}
+```
+
+**Полное отключение LLM:** Для работы только с газеттером и regex (без использования LLM вообще), 
+отключите оба компонента. См. пример конфигурации: `taxonfinder.no-llm.config.json`.
 
 #### Локализация промптов
 

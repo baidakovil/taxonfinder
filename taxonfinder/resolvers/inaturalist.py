@@ -21,14 +21,76 @@ class INaturalistSearcher:
     cache: DiskCache | None = None
 
     def search(self, query: str, locale: str) -> list[TaxonMatch]:
-        cached = self.cache.get(query, locale) if self.cache else None
-        if cached is not None:
-            return _parse_matches(cached, locale, query)
-
+        # Try to get enriched matches from cache first
+        cached_matches = self._get_cached_matches(query, locale)
+        if cached_matches is not None:
+            return cached_matches
+        
+        # Fetch from API
         response_json = self._request(query, locale)
-        if self.cache is not None:
-            self.cache.put(query, locale, response_json)
-        return _parse_matches(response_json, locale, query)
+        matches = _parse_matches(response_json, locale, query)
+        
+        # Enrich top result with full taxonomy from /v1/taxa/{id}
+        # autocomplete doesn't include 'ancestors', so we fetch it separately
+        if matches and matches[0].taxon_id:
+            try:
+                detail = self._fetch_taxon_detail(matches[0].taxon_id)
+                if detail:
+                    full_taxonomy = _taxonomy_from_result(detail)
+                    # Create new TaxonMatch with updated taxonomy
+                    first_match = matches[0]
+                    matches[0] = TaxonMatch(
+                        taxon_id=first_match.taxon_id,
+                        taxon_name=first_match.taxon_name,
+                        taxon_rank=first_match.taxon_rank,
+                        taxonomy=full_taxonomy,
+                        taxon_common_name_en=first_match.taxon_common_name_en,
+                        taxon_common_name_loc=first_match.taxon_common_name_loc,
+                        taxon_matched_name=first_match.taxon_matched_name,
+                        taxon_url=first_match.taxon_url,
+                        score=first_match.score,
+                        taxon_names=first_match.taxon_names,
+                    )
+            except Exception:
+                # Silently fail and keep original (incomplete) taxonomy
+                pass
+        
+        # Cache enriched matches
+        self._cache_matches(query, locale, matches)
+        
+        return matches
+    
+    def _get_cached_matches(self, query: str, locale: str) -> list[TaxonMatch] | None:
+        """Get enriched matches from cache (includes full taxonomy)."""
+        if not self.cache:
+            return None
+        
+        cached = self.cache.get(query, locale)
+        if cached is None:
+            return None
+        
+        # Check if cached data is enriched (v2 format with matches list)
+        if isinstance(cached, dict) and "matches" in cached:
+            try:
+                return [TaxonMatch.from_dict(m) for m in cached["matches"]]
+            except Exception:
+                # Invalid cache format, ignore
+                return None
+        
+        # Old format (raw API response), ignore and refetch
+        return None
+    
+    def _cache_matches(self, query: str, locale: str, matches: list[TaxonMatch]) -> None:
+        """Cache enriched matches (includes full taxonomy)."""
+        if not self.cache:
+            return
+        
+        # Store as enriched format (v2)
+        cache_data = {
+            "version": 2,
+            "matches": [m.to_dict() for m in matches]
+        }
+        self.cache.put(query, locale, cache_data)
 
     def _request(self, query: str, locale: str) -> dict[str, Any]:
         params = {"q": query, "locale": locale}
@@ -60,6 +122,33 @@ class INaturalistSearcher:
             )
 
         return {"results": []}
+
+    def _fetch_taxon_detail(self, taxon_id: int) -> dict[str, Any] | None:
+        """Fetch detailed taxon information including ancestors from /v1/taxa/{id}.
+        
+        This endpoint provides the 'ancestors' field that autocomplete lacks,
+        allowing us to build complete taxonomy information.
+        """
+        url = f"{self.config.base_url.rstrip('/')}/v1/taxa/{taxon_id}"
+        
+        try:
+            if self.rate_limiter is not None:
+                self.rate_limiter.acquire()
+            
+            response = self.http.get(
+                url,
+                headers={"User-Agent": self.user_agent},
+                timeout=self.config.timeout,
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("results", [])
+                return results[0] if results else None
+            
+            return None
+        except Exception:
+            return None
 
 
 def _sleep_backoff(attempt: int) -> None:

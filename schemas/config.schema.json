@@ -113,7 +113,6 @@
       "type": ["object", "null"],
       "description": "LLM extractor settings (Phase 1). Set to null or omit to disable.",
       "additionalProperties": false,
-      "required": ["provider", "model"],
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -183,13 +182,21 @@
           "default": false,
           "description": "Ollama only: stop the ollama process started automatically after the run finishes."
         }
+      },
+      "if": {
+        "properties": {
+          "enabled": { "const": true }
+        },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["provider", "model"]
       }
     },
     "llm_enricher": {
       "type": ["object", "null"],
       "description": "LLM enricher settings (Phase 4: enrichment of unresolved candidates). Set to null or omit to disable.",
       "additionalProperties": false,
-      "required": ["provider", "model"],
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -239,6 +246,15 @@
           "default": false,
           "description": "Ollama only: stop the ollama process started automatically after the run finishes."
         }
+      },
+      "if": {
+        "properties": {
+          "enabled": { "const": true }
+        },
+        "required": ["enabled"]
+      },
+      "then": {
+        "required": ["provider", "model"]
       }
     },
     "logging": {

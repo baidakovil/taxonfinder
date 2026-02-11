@@ -9,12 +9,13 @@ TaxonFinder extracts organism names (plants, animals, fungi, etc.) from Russian 
 - Hybrid extraction: gazetteer (spaCy PhraseMatcher), regex for Latin binomials, and LLM (independent extractor/enricher roles).
 - iNaturalist-powered verification and enrichment via httpx; gazetteer-backed records can bypass API calls when data is complete.
 - Configurable LLM providers (Ollama or hosted APIs) and resilient mode that tolerates missing gazetteer.
+- **LLM is optional:** Can work with gazetteer + regex only by setting `"enabled": false` in config (see `taxonfinder.no-llm.config.json`).
 
 ## Requirements
 - Python 3.11+
 - spaCy model `ru_core_news_md` (download with `python -m spacy download ru_core_news_md`)
-- Optional: running Ollama instance with the configured model when using the LLM extractor or enricher
-- Optional: API keys in `.env` for hosted LLM providers (OpenAI, Anthropic)
+- Optional: running Ollama instance with the configured model (only when using LLM extractor or enricher)
+- Optional: API keys in `.env` for hosted LLM providers (OpenAI, Anthropic) — not needed if LLM is disabled
 
 ## Quick start
 ```bash

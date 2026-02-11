@@ -134,9 +134,12 @@ def _require_llm_fields(data: dict, name: str) -> None:
 def _load_llm_extractor(data: dict | None) -> LlmExtractorConfig | None:
     if data is None:
         return None
-    _require_llm_fields(data, "llm_extractor")
+    # Only require fields if LLM is enabled
+    enabled = bool(data.get("enabled", True))
+    if enabled:
+        _require_llm_fields(data, "llm_extractor")
     return LlmExtractorConfig(
-        enabled=bool(data.get("enabled", True)),
+        enabled=enabled,
         provider=str(data.get("provider", "")),
         model=str(data.get("model", "")),
         url=data.get("url"),
@@ -154,9 +157,12 @@ def _load_llm_extractor(data: dict | None) -> LlmExtractorConfig | None:
 def _load_llm_enricher(data: dict | None) -> LlmEnricherConfig | None:
     if data is None:
         return None
-    _require_llm_fields(data, "llm_enricher")
+    # Only require fields if LLM is enabled
+    enabled = bool(data.get("enabled", True))
+    if enabled:
+        _require_llm_fields(data, "llm_enricher")
     return LlmEnricherConfig(
-        enabled=bool(data.get("enabled", True)),
+        enabled=enabled,
         provider=str(data.get("provider", "")),
         model=str(data.get("model", "")),
         url=data.get("url"),
